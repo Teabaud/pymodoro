@@ -1,0 +1,32 @@
+[project]
+name = "pymodoro"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Thibaud Veron"}
+]
+readme = "README.md"
+requires-python = ">=3.12,<3.15"
+dependencies = [
+    "pyside6 (>=6.10.2,<7.0.0)",
+    "pyyaml (>=6.0.2,<7.0.0)",
+    "pydantic (>=2.12.5,<3.0.0)",
+    "pytest (>=9.0.2,<10.0.0)",
+    "loguru (>=0.7.3,<0.8.0)",
+]
+
+[project.scripts]
+pymodoro = "pymodoro.cli:main"
+
+[tool.poetry]
+packages = [{include = "pymodoro", from = "src"}]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+dev = [
+    "black (>=26.1.0,<27.0.0)",
+    "isort (>=7.0.0,<8.0.0)"
+]
