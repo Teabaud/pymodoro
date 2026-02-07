@@ -1,460 +1,201 @@
 from __future__ import annotations
 
-import sys
-import types
-from typing import TYPE_CHECKING, Any, Callable
+from types import SimpleNamespace
+from typing import Any, Callable, cast
 
-import pytest
-
-if TYPE_CHECKING:
-    from pymodoro.app import PomodoroApp
+import pymodoro.app as app_module
 
 
 class DummySignal:
     def __init__(self) -> None:
-        self.callbacks: list[Callable[..., Any]] = []
+        self._callbacks: list[Callable[..., None]] = []
 
-    def connect(self, callback: Callable[..., Any]) -> None:
-        self.callbacks.append(callback)
+    def connect(self, callback: Callable[..., None]) -> None:
+        self._callbacks.append(callback)
 
     def emit(self, *args: Any, **kwargs: Any) -> None:
-        for callback in self.callbacks:
+        for callback in list(self._callbacks):
             callback(*args, **kwargs)
 
 
-class DummyAction:
-    def __init__(self, text: str) -> None:
-        self.text = text
-        self.triggered = DummySignal()
-
-    def setText(self, text: str) -> None:
-        self.text = text
-
-
-class DummyMenu:
-    def __init__(self) -> None:
-        self.actions: list[DummyAction] = []
-
-    def addAction(self, text: str) -> DummyAction:
-        action = DummyAction(text)
-        self.actions.append(action)
-        return action
-
-
-class DummyTray:
+class DummySessionPhaseManager:
     def __init__(self, *_: Any, **__: Any) -> None:
+        self.phaseChanged = DummySignal()
+        self.workEnded = DummySignal()
+        self.start_called = False
+        self.pause_until_called: list[Any] = []
+        self.resume_called = False
+        self.snooze_break_called = False
+
+    def start(self) -> None:
+        self.start_called = True
+
+    def pause_until(self, target: Any) -> None:
+        self.pause_until_called.append(target)
+
+    def resume(self) -> None:
+        self.resume_called = True
+
+    def snooze_break(self) -> None:
+        self.snooze_break_called = True
+
+
+class DummyTrayController:
+    def __init__(self, *_: Any, **__: Any) -> None:
+        self.pauseUntilRequested = DummySignal()
+        self.resumeRequested = DummySignal()
+        self.quitRequested = DummySignal()
+        self.refresh_called = False
+        self.show_called = False
+
+    def refresh(self) -> None:
+        self.refresh_called = True
+
+    def show(self) -> None:
+        self.show_called = True
+
+
+class DummyPrompt:
+    def __init__(self, *_: Any, **__: Any) -> None:
+        self.submitted = DummySignal()
+        self.snoozed = DummySignal()
         self.visible = False
-        self.tooltip = ""
-        self.icon = None
-        self.menu = None
+        self.show_called = 0
+        self.closed = False
+
+    def isVisible(self) -> bool:
+        return self.visible
 
     def show(self) -> None:
         self.visible = True
+        self.show_called += 1
 
-    def setVisible(self, visible: bool) -> None:
-        self.visible = visible
-
-    def setToolTip(self, text: str) -> None:
-        self.tooltip = text
-
-    def setIcon(self, icon: object) -> None:
-        self.icon = icon
-
-    def setContextMenu(self, menu: DummyMenu) -> None:
-        self.menu = menu
-
-
-class DummyIcon:
-    def __init__(self, pixmap: object) -> None:
-        self.pixmap = pixmap
-
-
-class DummyTimers:
-    work_duration = 60
-    break_duration = 120
-    snooze_duration = 60
-
-
-class DummyConfig:
-    timers = DummyTimers()
-
-    class messages:
-        work_end_question = "What is one thing you learned today?"
+    def close(self) -> None:
+        self.visible = False
+        self.closed = True
 
 
 class DummyApp:
+    def __init__(self) -> None:
+        self.exec_called = False
+
     def exec(self) -> int:
+        self.exec_called = True
         return 0
 
-    def setQuitOnLastWindowClosed(self, value: bool) -> None:
-        _ = value
 
-
-def _install_pyside_stubs() -> None:
-    qtcore = types.ModuleType("PySide6.QtCore")
-    qtgui = types.ModuleType("PySide6.QtGui")
-    qtwidgets = types.ModuleType("PySide6.QtWidgets")
-
-    class QObject:
-        pass
-
-    class QTimer:
-        def __init__(self, *_: Any, **__: Any) -> None:
-            self.interval = 0
-            self.started = False
-            self.single_shot = False
-            self.timeout = DummySignal()
-
-        def setSingleShot(self, single_shot: bool) -> None:
-            self.single_shot = single_shot
-
-        def setInterval(self, interval: int) -> None:
-            self.interval = interval
-
-        def start(self) -> None:
-            self.started = True
-
-        def stop(self) -> None:
-            self.started = False
-
-        def remainingTime(self) -> int:
-            return self.interval
-
-    class Qt:
-        class GlobalColor:
-            transparent = 0
-
-        class AlignmentFlag:
-            AlignCenter = 0
-
-        class BrushStyle:
-            NoBrush = 0
-
-        class WindowType:
-            Window = 0
-            FramelessWindowHint = 0
-            WindowStaysOnTopHint = 0
-
-        class WindowModality:
-            WindowModal = 0
-
-        class WidgetAttribute:
-            WA_ShowWithoutActivating = 0
-
-        class ShortcutContext:
-            WidgetWithChildrenShortcut = 0
-
-    class Signal:
-        def __init__(self, *_: Any, **__: Any) -> None:
-            self._callbacks: list[Callable[..., Any]] = []
-
-        def connect(self, callback: Callable[..., Any]) -> None:
-            self._callbacks.append(callback)
-
-        def emit(self, *args: Any, **kwargs: Any) -> None:
-            for callback in self._callbacks:
-                callback(*args, **kwargs)
-
-    class QRect:
-        def __init__(self, *_: Any, **__: Any) -> None:
-            pass
-
-    class QPixmap:
-        def __init__(self, *_: Any, **__: Any) -> None:
-            pass
-
-        def fill(self, *_: Any, **__: Any) -> None:
-            pass
-
-    class QPainter:
-        class RenderHint:
-            TextAntialiasing = 0
-
-        def __init__(self, *_: Any, **__: Any) -> None:
-            pass
-
-        def setRenderHint(self, *_: Any, **__: Any) -> None:
-            pass
-
-        def setPen(self, *_: Any, **__: Any) -> None:
-            pass
-
-        def setBrush(self, *_: Any, **__: Any) -> None:
-            pass
-
-        def setFont(self, *_: Any, **__: Any) -> None:
-            pass
-
-        def drawText(self, *_: Any, **__: Any) -> None:
-            pass
-
-        def end(self) -> None:
-            pass
-
-    class QFont:
-        class Weight:
-            Bold = 0
-
-        def __init__(self, *_: Any, **__: Any) -> None:
-            pass
-
-    class QPalette:
-        class ColorRole:
-            WindowText = 0
-
-    class QApplication:
-        def __init__(self, *_: Any, **__: Any) -> None:
-            pass
-
-        @staticmethod
-        def palette() -> "QPalette":
-            return QPalette()
-
-        @staticmethod
-        def quit() -> None:
-            pass
-
-        def setQuitOnLastWindowClosed(self, *_: Any, **__: Any) -> None:
-            pass
-
-    class QSystemTrayIcon:
-        @staticmethod
-        def isSystemTrayAvailable() -> bool:
-            return True
-
-    class QMenu:
-        pass
-
-    class QIcon:
-        def __init__(self, *_: Any, **__: Any) -> None:
-            pass
-
-    class QKeySequence:
-        def __init__(self, *_: Any, **__: Any) -> None:
-            pass
-
-    class QWidget:
-        def __init__(self, *_: Any, **__: Any) -> None:
-            self.title = ""
-            self.fullscreen = False
-            self.raised = False
-            self.activated = False
-            self.closed = False
-            self.visible = False
-
-        def setWindowTitle(self, title: str) -> None:
-            self.title = title
-
-        def showFullScreen(self) -> None:
-            self.fullscreen = True
-            self.visible = True
-
-        def raise_(self) -> None:
-            self.raised = True
-
-        def activateWindow(self) -> None:
-            self.activated = True
-
-        def close(self) -> None:
-            self.closed = True
-            self.visible = False
-
-        def show(self) -> None:
-            self.visible = True
-
-        def isVisible(self) -> bool:
-            return self.visible
-
-    class QLabel:
-        def __init__(self, *_: Any, **__: Any) -> None:
-            self.alignment = None
-
-        def setAlignment(self, alignment: object) -> None:
-            self.alignment = alignment
-
-        def setWordWrap(self, *_: Any, **__: Any) -> None:
-            pass
-
-    class QDialog(QWidget):
-        def setWindowFlags(self, *_: Any, **__: Any) -> None:
-            pass
-
-        def setWindowModality(self, *_: Any, **__: Any) -> None:
-            pass
-
-        def setAttribute(self, *_: Any, **__: Any) -> None:
-            pass
-
-        def grabKeyboard(self) -> None:
-            pass
-
-        def grabMouse(self) -> None:
-            pass
-
-        def releaseKeyboard(self) -> None:
-            pass
-
-        def releaseMouse(self) -> None:
-            pass
-
-        def setLayout(self, *_: Any, **__: Any) -> None:
-            pass
-
-        def setStyleSheet(self, *_: Any, **__: Any) -> None:
-            pass
-
-    class QVBoxLayout:
-        def __init__(self, *_: Any, **__: Any) -> None:
-            self.widgets: list[object] = []
-
-        def addWidget(self, widget: object) -> None:
-            self.widgets.append(widget)
-
-        def addSpacing(self, *_: Any, **__: Any) -> None:
-            pass
-
-        def addStretch(self, *_: Any, **__: Any) -> None:
-            pass
-
-        def addLayout(self, *_: Any, **__: Any) -> None:
-            pass
-
-    class QHBoxLayout(QVBoxLayout):
-        pass
-
-    class QPlainTextEdit:
-        def __init__(self, *_: Any, **__: Any) -> None:
-            self._text = ""
-            self._visible = True
-
-        def setPlaceholderText(self, *_: Any, **__: Any) -> None:
-            pass
-
-        def setVisible(self, visible: bool) -> None:
-            self._visible = visible
-
-        def isVisible(self) -> bool:
-            return self._visible
-
-        def setFocus(self) -> None:
-            pass
-
-        def toPlainText(self) -> str:
-            return self._text
-
-        def setPlainText(self, text: str) -> None:
-            self._text = text
-
-    class QPushButton:
-        def __init__(self, *_: Any, **__: Any) -> None:
-            self.clicked = DummySignal()
-
-        def setFocus(self) -> None:
-            pass
-
-    class QShortcut:
-        def __init__(self, *_: Any, **__: Any) -> None:
-            self.activated = DummySignal()
-
-        def setContext(self, *_: Any, **__: Any) -> None:
-            pass
-
-    setattr(qtcore, "QObject", QObject)
-    setattr(qtcore, "QTimer", QTimer)
-    setattr(qtcore, "Qt", Qt)
-    setattr(qtcore, "QRect", QRect)
-    setattr(qtcore, "Signal", Signal)
-
-    setattr(qtgui, "QPixmap", QPixmap)
-    setattr(qtgui, "QPainter", QPainter)
-    setattr(qtgui, "QFont", QFont)
-    setattr(qtgui, "QPalette", QPalette)
-    setattr(qtgui, "QIcon", QIcon)
-    setattr(qtgui, "QKeySequence", QKeySequence)
-    setattr(qtgui, "QShortcut", QShortcut)
-    setattr(qtgui, "QShowEvent", object)
-    setattr(qtgui, "QCloseEvent", object)
-
-    setattr(qtwidgets, "QApplication", QApplication)
-    setattr(qtwidgets, "QSystemTrayIcon", QSystemTrayIcon)
-    setattr(qtwidgets, "QMenu", QMenu)
-    setattr(qtwidgets, "QWidget", QWidget)
-    setattr(qtwidgets, "QLabel", QLabel)
-    setattr(qtwidgets, "QVBoxLayout", QVBoxLayout)
-    setattr(qtwidgets, "QDialog", QDialog)
-    setattr(qtwidgets, "QHBoxLayout", QHBoxLayout)
-    setattr(qtwidgets, "QPlainTextEdit", QPlainTextEdit)
-    setattr(qtwidgets, "QPushButton", QPushButton)
-
-    pyside6 = types.ModuleType("PySide6")
-    setattr(pyside6, "QtCore", qtcore)
-    setattr(pyside6, "QtGui", qtgui)
-    setattr(pyside6, "QtWidgets", qtwidgets)
-
-    sys.modules["PySide6"] = pyside6
-    sys.modules["PySide6.QtCore"] = qtcore
-    sys.modules["PySide6.QtGui"] = qtgui
-    sys.modules["PySide6.QtWidgets"] = qtwidgets
-
-
-@pytest.fixture(scope="session")
-def app_module():
-    _install_pyside_stubs()
-    from pymodoro import app as app_module
-
-    return app_module
-
-
-@pytest.fixture()
-def pomodoro_app(monkeypatch: pytest.MonkeyPatch, app_module) -> "PomodoroApp":
-    monkeypatch.setattr(app_module, "load_config", lambda: DummyConfig())
-    monkeypatch.setattr(app_module, "_get_qt_app", lambda: DummyApp())
-    monkeypatch.setattr(app_module.QtWidgets, "QSystemTrayIcon", DummyTray)
-    monkeypatch.setattr(app_module.QtWidgets, "QMenu", DummyMenu)
-    monkeypatch.setattr(app_module.QtGui, "QIcon", DummyIcon)
-    monkeypatch.setattr(
-        app_module.PomodoroApp,
-        "_render_icon",
-        lambda self, label: f"pixmap-{label}",
+def test_pomodoro_app_wires_controllers(monkeypatch: Any) -> None:
+    config = SimpleNamespace(
+        messages=SimpleNamespace(work_end_question="Break time?"),
+        timers=SimpleNamespace(work_duration=10, break_duration=5, snooze_duration=3),
     )
-    return app_module.PomodoroApp()
+    dummy_quit_called: list[bool] = []
+
+    def dummy_quit() -> None:
+        dummy_quit_called.append(True)
+
+    monkeypatch.setattr(app_module, "_get_qt_app", lambda: DummyApp())
+    monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
+    monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
+    monkeypatch.setattr(app_module, "FullScreenPrompt", DummyPrompt)
+    monkeypatch.setattr(app_module, "load_config", lambda: config)
+    monkeypatch.setattr(app_module.QtWidgets.QApplication, "quit", dummy_quit)
+
+    app = app_module.PomodoroApp()
+
+    phase_manager = cast(DummySessionPhaseManager, app._sp_manager)
+    tray_controller = cast(DummyTrayController, app._tray_controller)
+
+    assert phase_manager.start_called is True
+    assert tray_controller.show_called is True
+    assert tray_controller.refresh in phase_manager.phaseChanged._callbacks
+    assert app._show_break_window in phase_manager.workEnded._callbacks
+    assert phase_manager.pause_until in tray_controller.pauseUntilRequested._callbacks
+    assert phase_manager.resume in tray_controller.resumeRequested._callbacks
+    assert dummy_quit in tray_controller.quitRequested._callbacks
+    app.launch()
+    dummy_app = cast(DummyApp, app._app)
+    assert dummy_app.exec_called is True
 
 
-def test_init_sets_timers_and_tray(pomodoro_app, app_module) -> None:
-    assert pomodoro_app._mode == app_module.Mode.WORK
-    assert pomodoro_app._tray.visible is True
-    assert pomodoro_app._tray_update_clock.interval == 1000
-    assert pomodoro_app._tray_update_clock.started is True
-    assert pomodoro_app._mode_timer.interval == 60 * 1000
-    assert pomodoro_app._mode_timer.started is True
-    assert pomodoro_app._tray.tooltip == "work 00:01:00"
+def test_show_break_window_reuses_prompt(monkeypatch: Any) -> None:
+    monkeypatch.setattr(app_module, "_get_qt_app", lambda: DummyApp())
+    monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
+    monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
+    monkeypatch.setattr(app_module, "FullScreenPrompt", DummyPrompt)
+    monkeypatch.setattr(
+        app_module,
+        "load_config",
+        lambda: SimpleNamespace(
+            messages=SimpleNamespace(work_end_question="Break time?"),
+            timers=SimpleNamespace(
+                work_duration=10, break_duration=5, snooze_duration=3
+            ),
+        ),
+    )
+
+    app = app_module.PomodoroApp()
+
+    app._show_break_window()
+    prompt = app._fullscreen_window
+    assert prompt is not None
+    dummy_prompt = cast(DummyPrompt, prompt)
+    assert dummy_prompt.show_called == 1
+
+    app._show_break_window()
+    assert app._fullscreen_window is prompt
+    assert dummy_prompt.show_called == 1
 
 
-def test_start_session_updates_mode_and_tray(pomodoro_app, app_module) -> None:
-    pomodoro_app._start_session(mode=app_module.Mode.BREAK, duration_seconds=120)
+def test_break_snooze_closes_prompt_and_snoozes(monkeypatch: Any) -> None:
+    monkeypatch.setattr(app_module, "_get_qt_app", lambda: DummyApp())
+    monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
+    monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
+    monkeypatch.setattr(app_module, "FullScreenPrompt", DummyPrompt)
+    monkeypatch.setattr(
+        app_module,
+        "load_config",
+        lambda: SimpleNamespace(
+            messages=SimpleNamespace(work_end_question="Break time?"),
+            timers=SimpleNamespace(
+                work_duration=10, break_duration=5, snooze_duration=3
+            ),
+        ),
+    )
 
-    assert pomodoro_app._mode == app_module.Mode.BREAK
-    assert pomodoro_app._mode_timer.interval == 120 * 1000
-    assert pomodoro_app._tray.tooltip == "break 00:02:00"
+    app = app_module.PomodoroApp()
+    prompt = DummyPrompt()
+    app_any = cast(Any, app)
+    app_any._fullscreen_window = prompt
+
+    app._on_break_snooze()
+
+    assert prompt.closed is True
+    phase_manager = cast(DummySessionPhaseManager, app._sp_manager)
+    assert phase_manager.snooze_break_called is True
 
 
-def test_on_mode_timer_timeout_switches_modes(pomodoro_app, app_module) -> None:
-    pomodoro_app._mode = app_module.Mode.WORK
-    pomodoro_app.on_mode_timer_timeout()
+def test_note_submit_closes_prompt(monkeypatch: Any) -> None:
+    monkeypatch.setattr(app_module, "_get_qt_app", lambda: DummyApp())
+    monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
+    monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
+    monkeypatch.setattr(app_module, "FullScreenPrompt", DummyPrompt)
+    monkeypatch.setattr(
+        app_module,
+        "load_config",
+        lambda: SimpleNamespace(
+            messages=SimpleNamespace(work_end_question="Break time?"),
+            timers=SimpleNamespace(
+                work_duration=10, break_duration=5, snooze_duration=3
+            ),
+        ),
+    )
 
-    assert pomodoro_app._mode == app_module.Mode.BREAK
-    assert pomodoro_app._mode_timer.interval == 120 * 1000
+    app = app_module.PomodoroApp()
+    prompt = DummyPrompt()
+    app_any = cast(Any, app)
+    app_any._fullscreen_window = prompt
 
-    pomodoro_app.on_mode_timer_timeout()
+    app._on_note_submit("done")
 
-    assert pomodoro_app._mode == app_module.Mode.WORK
-    assert pomodoro_app._mode_timer.interval == 60 * 1000
-
-
-def test_on_pause_action_resumes_when_paused(pomodoro_app, app_module) -> None:
-    pomodoro_app._mode = app_module.Mode.PAUSE
-
-    pomodoro_app._on_pause_action()
-
-    assert pomodoro_app._mode == app_module.Mode.WORK
-    assert pomodoro_app._action_pause.text == "Pause until..."
+    assert prompt.closed is True

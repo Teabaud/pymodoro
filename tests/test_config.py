@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import pytest
 import yaml
@@ -43,5 +44,5 @@ def test_load_config_invalid_schema_raises(tmp_path: Path) -> None:
     config_path = tmp_path / "config.yaml"
     config_path.write_text("timers: nope\n", encoding="utf-8")
 
-    with pytest.raises(ValidationError):
+    with pytest.raises(cast(type[BaseException], ValidationError)):
         load_config(config_path)

@@ -38,6 +38,7 @@ SUBMIT_SHORTCUTS = [
     QtGui.QKeySequence("Ctrl+Enter"),
 ]
 
+
 class PromptMessage(QtWidgets.QLabel):
     def __init__(self, message: str, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(message, parent)
@@ -144,35 +145,3 @@ class FullScreenPrompt(QtWidgets.QDialog):
     def _on_snooze(self) -> None:
         self._answered = True
         self.snoozed.emit()
-
-
-class PauseUntilDialog(QtWidgets.QDialog):
-    def __init__(
-        self,
-        default_datetime: QtCore.QDateTime,
-        parent: QtWidgets.QWidget | None = None,
-    ) -> None:
-        super().__init__(parent)
-        self.setWindowTitle("Pause until...")
-        self.setModal(True)
-        self._time_picker = QtWidgets.QDateTimeEdit(default_datetime, self)
-        self._time_picker.setCalendarPopup(True)
-        self._time_picker.setDisplayFormat("yyyy-MM-dd HH:mm")
-
-        form_layout = QtWidgets.QFormLayout()
-        form_layout.addRow("Resume at:", self._time_picker)
-
-        buttons = QtWidgets.QDialogButtonBox(
-            QtWidgets.QDialogButtonBox.StandardButton.Ok
-            | QtWidgets.QDialogButtonBox.StandardButton.Cancel
-        )
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-
-        layout = QtWidgets.QVBoxLayout()
-        layout.addLayout(form_layout)
-        layout.addWidget(buttons)
-        self.setLayout(layout)
-
-    def selected_datetime(self) -> QtCore.QDateTime:
-        return self._time_picker.dateTime()
