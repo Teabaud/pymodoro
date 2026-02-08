@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Callable, cast
 
 import pytest
+
 import pymodoro.app as app_module
 from pymodoro.config import AppConfig, MessagesConfig, TimersConfig
 
@@ -137,7 +138,9 @@ def test_show_break_window_reuses_prompt(monkeypatch: Any, config: AppConfig) ->
     assert dummy_prompt.show_called == 1
 
 
-def test_break_snooze_closes_prompt_and_snoozes(monkeypatch: Any, config: AppConfig) -> None:
+def test_break_snooze_closes_prompt_and_snoozes(
+    monkeypatch: Any, config: AppConfig
+) -> None:
     monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
     monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
     monkeypatch.setattr(app_module, "FullScreenPrompt", DummyPrompt)
