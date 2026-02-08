@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import random
+
 from loguru import logger
 
 from pymodoro.config import load_config
@@ -27,7 +29,7 @@ class PomodoroApp(QtCore.QObject):
         self._app = _get_qt_app()
 
         config = load_config()
-        self._work_end_question = config.messages.work_end_question
+        self._work_end_prompts = config.messages.work_end_prompts
 
         self._sp_manager = SessionPhaseManager(
             work_duration=config.timers.work_duration,
@@ -51,7 +53,8 @@ class PomodoroApp(QtCore.QObject):
 
     def _show_break_window(self) -> None:
         if self._fullscreen_window is None:
-            self._fullscreen_window = FullScreenPrompt(message=self._work_end_question)
+            prompt_message = self._select_work_end_prompt()
+            self._fullscreen_window = FullScreenPrompt(prompt_message=prompt_message)
             self._fullscreen_window.submitted.connect(self._on_note_submit)
             self._fullscreen_window.snoozed.connect(self._on_break_snooze)
         if self._fullscreen_window.isVisible():
@@ -69,3 +72,6 @@ class PomodoroApp(QtCore.QObject):
     def _close_break_window(self) -> None:
         if self._fullscreen_window is not None:
             self._fullscreen_window.close()
+
+    def _select_work_end_prompt(self) -> str:
+        return random.choice(self._work_end_prompts)

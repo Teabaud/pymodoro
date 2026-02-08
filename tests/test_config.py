@@ -29,7 +29,7 @@ def test_load_config_uses_existing_file(tmp_path: Path) -> None:
     config = load_config(config_path)
 
     assert config_path.read_text(encoding="utf-8") == DEFAULT_CONFIG_YAML
-    assert config.messages.work_end_question
+    assert config.messages.work_end_prompts
 
 
 def test_load_config_invalid_yaml_raises(tmp_path: Path) -> None:

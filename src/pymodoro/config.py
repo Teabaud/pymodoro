@@ -13,7 +13,10 @@ DEFAULT_CONFIG_YAML = """timers:
   snooze_duration: 60  # seconds (1 minute)
 
 messages:
-  work_end_question: "How do you feel rigth now?"
+  work_end_prompts:
+    - "How present are you in what you do?"
+    - "What do you want to focus on next?"
+    - "What is your goal for the day?"
 """
 
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[2] / "config.yaml"
@@ -26,7 +29,7 @@ class TimersConfig(BaseModel):
 
 
 class MessagesConfig(BaseModel):
-    work_end_question: str
+    work_end_prompts: list[str]
 
 
 class AppConfig(BaseModel):

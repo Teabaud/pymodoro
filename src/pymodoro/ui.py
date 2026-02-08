@@ -40,8 +40,8 @@ SUBMIT_SHORTCUTS = [
 
 
 class PromptMessage(QtWidgets.QLabel):
-    def __init__(self, message: str, parent: QtWidgets.QWidget | None = None) -> None:
-        super().__init__(message, parent)
+    def __init__(self, prompt: str, parent: QtWidgets.QWidget | None = None) -> None:
+        super().__init__(prompt, parent)
         self.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.setWordWrap(True)
 
@@ -69,7 +69,7 @@ class FullScreenPrompt(QtWidgets.QDialog):
 
     def __init__(
         self,
-        message: str,
+        prompt_message: str,
         parent: QtWidgets.QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -82,8 +82,8 @@ class FullScreenPrompt(QtWidgets.QDialog):
         self.setWindowModality(QtCore.Qt.WindowModality.WindowModal)
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_ShowWithoutActivating, False)
 
-        self._message_label = PromptMessage(message, self)
-        self._input = PromptInput(self)
+        self._prompt_message = PromptMessage(prompt_message, self)
+        self._prompt_input = PromptInput(self)
         self._submit_button = PromptSubmitButton(self)
         self._snooze_button = PromptSnoozeButton(self)
         self._submit_button.clicked.connect(self._on_submit)
@@ -93,6 +93,9 @@ class FullScreenPrompt(QtWidgets.QDialog):
         self.setLayout(self._build_layout())
         self.setStyleSheet(STYLESHEET)
 
+    def set_prompt_message(self, prompt_message: str) -> None:
+        self._prompt_message.setText(prompt_message)
+
     def _install_submit_shortcuts(self) -> None:
         for shortcut in SUBMIT_SHORTCUTS:
             QtGui.QShortcut(shortcut, self).activated.connect(self._on_submit)
@@ -100,9 +103,9 @@ class FullScreenPrompt(QtWidgets.QDialog):
     def _build_layout(self) -> QtWidgets.QVBoxLayout:
         layout = QtWidgets.QVBoxLayout()
         layout.addStretch(2)
-        layout.addWidget(self._message_label)
+        layout.addWidget(self._prompt_message)
         layout.addSpacing(24)
-        layout.addWidget(self._input)
+        layout.addWidget(self._prompt_input)
         layout.addSpacing(24)
         buttons_layout = QtWidgets.QHBoxLayout()
         buttons_layout.addStretch(1)
@@ -116,16 +119,16 @@ class FullScreenPrompt(QtWidgets.QDialog):
     def showEvent(self, event: QtGui.QShowEvent) -> None:
         super().showEvent(event)
         self._answered = False
-        self._input.setPlainText("")
+        self._prompt_input.setPlainText("")
         self.showFullScreen()
         self.raise_()
         self.activateWindow()
-        self._input.setFocus()
+        self._prompt_input.setFocus()
 
     def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
-        if self.focusWidget() is not self._input:
-            self._input.setFocus(QtCore.Qt.FocusReason.ShortcutFocusReason)
-            QtWidgets.QApplication.sendEvent(self._input, event)
+        if self.focusWidget() is not self._prompt_input:
+            self._prompt_input.setFocus(QtCore.Qt.FocusReason.ShortcutFocusReason)
+            QtWidgets.QApplication.sendEvent(self._prompt_input, event)
         else:
             super().keyPressEvent(event)
 
@@ -136,7 +139,7 @@ class FullScreenPrompt(QtWidgets.QDialog):
             event.ignore()
 
     def _on_submit(self) -> None:
-        text = self._input.toPlainText().strip()
+        text = self._prompt_input.toPlainText().strip()
         if text == "":
             return
         self._answered = True
