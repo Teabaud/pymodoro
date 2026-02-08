@@ -4,31 +4,31 @@ import random
 
 from loguru import logger
 
-from pymodoro.config import load_config
+from pymodoro.config import AppConfig
 from pymodoro.session import SessionPhaseManager
 from pymodoro.tray import TrayController
 from pymodoro.ui import FullScreenPrompt
 
 # isort: split
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtCore
+from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
 
-def _get_qt_app() -> QtWidgets.QApplication:
-    app = QtWidgets.QApplication([])
+def _get_qt_app() -> QApplication:
+    app = QApplication([])
     app.setQuitOnLastWindowClosed(False)
     app.setApplicationName("Pymodoro")
     app.setDesktopFileName("pymodoro")
-    if not QtWidgets.QSystemTrayIcon.isSystemTrayAvailable():
+    if not QSystemTrayIcon.isSystemTrayAvailable():
         raise RuntimeError("System tray is not available in this session.")
     return app
 
 
 class PomodoroApp(QtCore.QObject):
-    def __init__(self) -> None:
+    def __init__(self, config: AppConfig, app: QApplication | None = None) -> None:
         super().__init__()
-        self._app = _get_qt_app()
+        self._app = app or _get_qt_app()
 
-        config = load_config()
         self._work_end_prompts = config.messages.work_end_prompts
 
         self._sp_manager = SessionPhaseManager(
@@ -42,7 +42,7 @@ class PomodoroApp(QtCore.QObject):
         self._sp_manager.workEnded.connect(self._show_break_window)
         self._tray_controller.pauseUntilRequested.connect(self._sp_manager.pause_until)
         self._tray_controller.resumeRequested.connect(self._sp_manager.resume)
-        self._tray_controller.quitRequested.connect(QtWidgets.QApplication.quit)
+        self._tray_controller.quitRequested.connect(self._app.quit)
 
         self._sp_manager.start()
         self._tray_controller.show()

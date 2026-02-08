@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
 from typing import Any, Callable, cast
 
+import pytest
 import pymodoro.app as app_module
+from pymodoro.config import AppConfig, MessagesConfig, TimersConfig
 
 
 class DummySignal:
@@ -78,30 +79,31 @@ class DummyPrompt:
 class DummyApp:
     def __init__(self) -> None:
         self.exec_called = False
+        self.quit_called = False
 
     def exec(self) -> int:
         self.exec_called = True
         return 0
 
+    def quit(self) -> None:
+        self.quit_called = True
 
-def test_pomodoro_app_wires_controllers(monkeypatch: Any) -> None:
-    config = SimpleNamespace(
-        messages=SimpleNamespace(work_end_question="Break time?"),
-        timers=SimpleNamespace(work_duration=10, break_duration=5, snooze_duration=3),
+
+@pytest.fixture
+def config() -> AppConfig:
+    return AppConfig(
+        messages=MessagesConfig(work_end_prompts=["Break time?"]),
+        timers=TimersConfig(work_duration=10, break_duration=5, snooze_duration=3),
     )
-    dummy_quit_called: list[bool] = []
 
-    def dummy_quit() -> None:
-        dummy_quit_called.append(True)
 
-    monkeypatch.setattr(app_module, "_get_qt_app", lambda: DummyApp())
+def test_pomodoro_app_wires_controllers(monkeypatch: Any, config: AppConfig) -> None:
     monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
     monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
     monkeypatch.setattr(app_module, "FullScreenPrompt", DummyPrompt)
-    monkeypatch.setattr(app_module, "load_config", lambda: config)
-    monkeypatch.setattr(app_module.QtWidgets.QApplication, "quit", dummy_quit)
 
-    app = app_module.PomodoroApp()
+    dummy_app = DummyApp()
+    app = app_module.PomodoroApp(config, app=cast(Any, dummy_app))
 
     phase_manager = cast(DummySessionPhaseManager, app._sp_manager)
     tray_controller = cast(DummyTrayController, app._tray_controller)
@@ -112,29 +114,17 @@ def test_pomodoro_app_wires_controllers(monkeypatch: Any) -> None:
     assert app._show_break_window in phase_manager.workEnded._callbacks
     assert phase_manager.pause_until in tray_controller.pauseUntilRequested._callbacks
     assert phase_manager.resume in tray_controller.resumeRequested._callbacks
-    assert dummy_quit in tray_controller.quitRequested._callbacks
+    assert dummy_app.quit in tray_controller.quitRequested._callbacks
     app.launch()
-    dummy_app = cast(DummyApp, app._app)
     assert dummy_app.exec_called is True
 
 
-def test_show_break_window_reuses_prompt(monkeypatch: Any) -> None:
-    monkeypatch.setattr(app_module, "_get_qt_app", lambda: DummyApp())
+def test_show_break_window_reuses_prompt(monkeypatch: Any, config: AppConfig) -> None:
     monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
     monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
     monkeypatch.setattr(app_module, "FullScreenPrompt", DummyPrompt)
-    monkeypatch.setattr(
-        app_module,
-        "load_config",
-        lambda: SimpleNamespace(
-            messages=SimpleNamespace(work_end_question="Break time?"),
-            timers=SimpleNamespace(
-                work_duration=10, break_duration=5, snooze_duration=3
-            ),
-        ),
-    )
 
-    app = app_module.PomodoroApp()
+    app = app_module.PomodoroApp(config, app=cast(Any, DummyApp()))
 
     app._show_break_window()
     prompt = app._fullscreen_window
@@ -147,23 +137,12 @@ def test_show_break_window_reuses_prompt(monkeypatch: Any) -> None:
     assert dummy_prompt.show_called == 1
 
 
-def test_break_snooze_closes_prompt_and_snoozes(monkeypatch: Any) -> None:
-    monkeypatch.setattr(app_module, "_get_qt_app", lambda: DummyApp())
+def test_break_snooze_closes_prompt_and_snoozes(monkeypatch: Any, config: AppConfig) -> None:
     monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
     monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
     monkeypatch.setattr(app_module, "FullScreenPrompt", DummyPrompt)
-    monkeypatch.setattr(
-        app_module,
-        "load_config",
-        lambda: SimpleNamespace(
-            messages=SimpleNamespace(work_end_question="Break time?"),
-            timers=SimpleNamespace(
-                work_duration=10, break_duration=5, snooze_duration=3
-            ),
-        ),
-    )
 
-    app = app_module.PomodoroApp()
+    app = app_module.PomodoroApp(config, app=cast(Any, DummyApp()))
     prompt = DummyPrompt()
     app_any = cast(Any, app)
     app_any._fullscreen_window = prompt
@@ -175,23 +154,12 @@ def test_break_snooze_closes_prompt_and_snoozes(monkeypatch: Any) -> None:
     assert phase_manager.snooze_break_called is True
 
 
-def test_note_submit_closes_prompt(monkeypatch: Any) -> None:
-    monkeypatch.setattr(app_module, "_get_qt_app", lambda: DummyApp())
+def test_note_submit_closes_prompt(monkeypatch: Any, config: AppConfig) -> None:
     monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
     monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
     monkeypatch.setattr(app_module, "FullScreenPrompt", DummyPrompt)
-    monkeypatch.setattr(
-        app_module,
-        "load_config",
-        lambda: SimpleNamespace(
-            messages=SimpleNamespace(work_end_question="Break time?"),
-            timers=SimpleNamespace(
-                work_duration=10, break_duration=5, snooze_duration=3
-            ),
-        ),
-    )
 
-    app = app_module.PomodoroApp()
+    app = app_module.PomodoroApp(config, app=cast(Any, DummyApp()))
     prompt = DummyPrompt()
     app_any = cast(Any, app)
     app_any._fullscreen_window = prompt
