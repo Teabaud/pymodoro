@@ -7,7 +7,7 @@ from PySide6 import QtCore
 
 import pymodoro.tray as tray_module
 from pymodoro.session import SessionPhase
-from pymodoro.tray import TrayController
+from pymodoro.tray import TRAY_ICON_LABELS, TrayController
 
 
 class DummySignal:
@@ -18,7 +18,7 @@ class DummySignal:
         self._callbacks.append(callback)
 
     def emit(self, *args: Any, **kwargs: Any) -> None:
-        for callback in list(self._callbacks):
+        for callback in list[Callable[..., None]](self._callbacks):
             callback(*args, **kwargs)
 
 
@@ -100,7 +100,7 @@ def test_refresh_updates_pause_tooltip_and_icon(
     tray_icon = cast(DummyTray, tray._tray)
     assert tray_icon.tooltip is not None
     assert tray_icon.tooltip.startswith("Pause until ")
-    assert tray_icon.icon == "icon:pix:P"
+    assert tray_icon.icon == f"icon:pix:{TRAY_ICON_LABELS[SessionPhase.PAUSE]}"
 
 
 def test_refresh_updates_work_tooltip_and_icon(
@@ -124,7 +124,31 @@ def test_refresh_updates_work_tooltip_and_icon(
     assert tray._action_pause.text == "Pause until..."
     tray_icon = cast(DummyTray, tray._tray)
     assert tray_icon.tooltip == "work 00:00:05"
-    assert tray_icon.icon == "icon:pix:W"
+    assert tray_icon.icon == f"icon:pix:{TRAY_ICON_LABELS[SessionPhase.WORK]}"
+
+
+def test_refresh_updates_break_tooltip_and_icon(
+    qcoreapp: QtCore.QCoreApplication, monkeypatch: Any
+) -> None:
+    monkeypatch.setattr(tray_module.QtWidgets, "QSystemTrayIcon", DummyTray)
+    monkeypatch.setattr(tray_module.QtWidgets, "QMenu", DummyMenu)
+    monkeypatch.setattr(tray_module.QtGui, "QIcon", lambda pixmap: f"icon:{pixmap}")
+    monkeypatch.setattr(
+        TrayController, "_render_icon", lambda self, label: f"pix:{label}"
+    )
+
+    sp_manager = DummySessionPhaseManager(SessionPhase.BREAK, remaining_ms=12_000)
+    tray = TrayController(
+        app=cast(Any, SimpleNamespace()),
+        session_phase_manager=cast(Any, sp_manager),
+    )
+
+    tray.refresh()
+
+    assert tray._action_pause.text == "Pause until..."
+    tray_icon = cast(DummyTray, tray._tray)
+    assert tray_icon.tooltip == "break 00:00:12"
+    assert tray_icon.icon == f"icon:pix:{TRAY_ICON_LABELS[SessionPhase.BREAK]}"
 
 
 def test_pause_action_emits_resume_when_paused(

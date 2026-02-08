@@ -6,6 +6,12 @@ from pymodoro.time_utils import TimeFormatter
 # isort: split
 from PySide6 import QtCore, QtGui, QtWidgets
 
+TRAY_ICON_LABELS = {
+    SessionPhase.WORK: "W",
+    SessionPhase.BREAK: "☕",
+    SessionPhase.PAUSE: "⏸",
+}
+
 
 class TrayController(QtCore.QObject):
     pauseUntilRequested = QtCore.Signal(object)
@@ -45,12 +51,14 @@ class TrayController(QtCore.QObject):
         pixmap.fill(QtCore.Qt.GlobalColor.transparent)
         painter = QtGui.QPainter(pixmap)
         painter.setRenderHint(QtGui.QPainter.RenderHint.TextAntialiasing)
-        painter.setPen(
-            QtWidgets.QApplication.palette().color(QtGui.QPalette.ColorRole.WindowText)
-        )
+        palette = QtWidgets.QApplication.palette()
+        if self._session_phase_manager.session_phase == SessionPhase.PAUSE:
+            color = QtGui.QColor("#b53131")
+        else:
+            color = palette.color(QtGui.QPalette.ColorRole.WindowText)
+        painter.setPen(color)
         painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
-
-        font = QtGui.QFont("Sans Serif", int(size * 0.8), QtGui.QFont.Weight.Bold)
+        font = QtGui.QFont("Sans Serif", int(size * 0.7), QtGui.QFont.Weight.ExtraBold)
         painter.setFont(font)
         painter.drawText(
             QtCore.QRect(0, 0, size, size),
@@ -73,11 +81,7 @@ class TrayController(QtCore.QObject):
             self._tray.setToolTip(f"{phase.value} {countdown_label}")
             self._action_pause.setText("Pause until...")
 
-        label = {
-            SessionPhase.WORK: "W",
-            SessionPhase.BREAK: "B",
-            SessionPhase.PAUSE: "P",
-        }.get(phase, "?")
+        label = TRAY_ICON_LABELS.get(phase, "?")
         pixmap = self._render_icon(label)
         self._tray.setIcon(QtGui.QIcon(pixmap))
 
