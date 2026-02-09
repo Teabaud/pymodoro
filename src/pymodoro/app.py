@@ -52,13 +52,15 @@ class PomodoroApp(QtCore.QObject):
         self.launch = self._app.exec
 
     def _show_break_window(self) -> None:
+        if self._fullscreen_window and self._fullscreen_window.isVisible():
+            return
+        prompt_message = self._select_work_end_prompt()
         if self._fullscreen_window is None:
-            prompt_message = self._select_work_end_prompt()
             self._fullscreen_window = FullScreenPrompt(prompt_message=prompt_message)
             self._fullscreen_window.submitted.connect(self._on_note_submit)
             self._fullscreen_window.snoozed.connect(self._on_break_snooze)
-        if self._fullscreen_window.isVisible():
-            return
+        else:
+            self._fullscreen_window.set_prompt_message(prompt_message)
         self._fullscreen_window.show()
 
     def _on_note_submit(self, text: str) -> None:

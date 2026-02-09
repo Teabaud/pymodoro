@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 from typing import Any, Callable, cast
 
 import pytest
@@ -64,6 +65,7 @@ class DummyPrompt:
         self.visible = False
         self.show_called = 0
         self.closed = False
+        self.prompt_message: str | None = None
 
     def isVisible(self) -> bool:
         return self.visible
@@ -75,6 +77,9 @@ class DummyPrompt:
     def close(self) -> None:
         self.visible = False
         self.closed = True
+
+    def set_prompt_message(self, prompt_message: str) -> None:
+        self.prompt_message = prompt_message
 
 
 class DummyApp:
@@ -170,3 +175,32 @@ def test_note_submit_closes_prompt(monkeypatch: Any, config: AppConfig) -> None:
     app._on_note_submit("done")
 
     assert prompt.closed is True
+
+
+def test_work_end_prompt_selection_not_constant(monkeypatch: Any) -> None:
+    monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
+    monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
+    rng = random.Random(0)
+    monkeypatch.setattr(app_module.random, "choice", rng.choice)
+
+    prompts = [f"Prompt {index}" for index in range(10)]
+    config = AppConfig(
+        messages=MessagesConfig(work_end_prompts=prompts),
+        timers=TimersConfig(work_duration=10, break_duration=5, snooze_duration=3),
+    )
+    app = app_module.PomodoroApp(config, app=cast(Any, DummyApp()))
+
+    selections = [app._select_work_end_prompt() for _ in range(10)]
+
+    assert selections == [
+        "Prompt 6",
+        "Prompt 6",
+        "Prompt 0",
+        "Prompt 4",
+        "Prompt 8",
+        "Prompt 7",
+        "Prompt 6",
+        "Prompt 4",
+        "Prompt 7",
+        "Prompt 5",
+    ]
