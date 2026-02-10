@@ -13,13 +13,25 @@ A lightweight system-tray Pomodoro timer with fullscreen breaks and quick notes.
 - A desktop session with system tray support
 
 ## Install
-Using Poetry:
+Direct install using pipx (or pip, although not recomended to keep separate environment)
+```bash
+pipx install git+https://github.com/Teabaud/pymodoro
+```
+
+Manual install using Poetry:
 
 ```bash
 poetry install
 ```
 
 ## Run
+With pipx install
+```bash
+pymodoro
+```
+
+With Poetry install
+
 ```bash
 poetry run pymodoro
 ```
