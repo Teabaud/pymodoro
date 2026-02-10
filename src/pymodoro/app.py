@@ -7,7 +7,7 @@ from loguru import logger
 from pymodoro.config import AppConfig
 from pymodoro.session import SessionPhaseManager
 from pymodoro.tray import TrayController
-from pymodoro.ui import FullScreenPrompt
+from pymodoro.break_screen import BreakScreen
 
 # isort: split
 from PySide6 import QtCore
@@ -47,24 +47,24 @@ class PomodoroApp(QtCore.QObject):
         self._sp_manager.start()
         self._tray_controller.show()
 
-        self._fullscreen_window: FullScreenPrompt | None = None
+        self._break_screen: BreakScreen | None = None
 
         self.launch = self._app.exec
 
     def _show_break_window(self) -> None:
-        if self._fullscreen_window and self._fullscreen_window.isVisible():
+        if self._break_screen and self._break_screen.isVisible():
             return
         prompt_message = self._select_work_end_prompt()
-        if self._fullscreen_window is None:
-            self._fullscreen_window = FullScreenPrompt(prompt_message=prompt_message)
-            self._fullscreen_window.submitted.connect(self._on_note_submit)
-            self._fullscreen_window.snoozed.connect(self._on_break_snooze)
+        if self._break_screen is None:
+            self._break_screen = BreakScreen(prompt_message=prompt_message)
+            self._break_screen.submitted.connect(self._on_break_screen_submit)
+            self._break_screen.snoozed.connect(self._on_break_snooze)
         else:
-            self._fullscreen_window.set_prompt_message(prompt_message)
-        self._fullscreen_window.show()
+            self._break_screen.set_prompt_message(prompt_message)
+        self._break_screen.show()
 
-    def _on_note_submit(self, text: str) -> None:
-        logger.info("Note submitted: {}", text)
+    def _on_break_screen_submit(self, text: str, focus_rating: int | None) -> None:
+        logger.info("Note: {} | focus_rating: {}", text, focus_rating)
         self._close_break_window()
 
     def _on_break_snooze(self) -> None:
@@ -72,8 +72,8 @@ class PomodoroApp(QtCore.QObject):
         self._sp_manager.snooze_break()
 
     def _close_break_window(self) -> None:
-        if self._fullscreen_window is not None:
-            self._fullscreen_window.close()
+        if self._break_screen is not None:
+            self._break_screen.close()
 
     def _select_work_end_prompt(self) -> str:
         return random.choice(self._work_end_prompts)

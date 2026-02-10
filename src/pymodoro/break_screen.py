@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from pymodoro.break_screen_widgets import FocusRatingWidget, PromptCard
+
 STYLESHEET = """
 QDialog {
     background-color: #101113;
@@ -39,32 +41,8 @@ SUBMIT_SHORTCUTS = [
 ]
 
 
-class PromptMessage(QtWidgets.QLabel):
-    def __init__(self, prompt: str, parent: QtWidgets.QWidget | None = None) -> None:
-        super().__init__(prompt, parent)
-        self.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self.setWordWrap(True)
-
-
-class PromptInput(QtWidgets.QPlainTextEdit):
-    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setPlaceholderText("Type your answer here...")
-        self.setVisible(True)
-
-
-class PromptSubmitButton(QtWidgets.QPushButton):
-    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
-        super().__init__("Submit", parent)
-
-
-class PromptSnoozeButton(QtWidgets.QPushButton):
-    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
-        super().__init__("Snooze", parent)
-
-
-class FullScreenPrompt(QtWidgets.QDialog):
-    submitted = QtCore.Signal(str)
+class BreakScreen(QtWidgets.QDialog):
+    submitted = QtCore.Signal(str, object)
     snoozed = QtCore.Signal()
 
     def __init__(
@@ -82,10 +60,10 @@ class FullScreenPrompt(QtWidgets.QDialog):
         self.setWindowModality(QtCore.Qt.WindowModality.WindowModal)
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_ShowWithoutActivating, False)
 
-        self._prompt_message = PromptMessage(prompt_message, self)
-        self._prompt_input = PromptInput(self)
-        self._submit_button = PromptSubmitButton(self)
-        self._snooze_button = PromptSnoozeButton(self)
+        self._prompt_card = PromptCard(prompt_message, self)
+        self._focus_rating_widget = FocusRatingWidget(self)
+        self._submit_button = QtWidgets.QPushButton("Submit", self)
+        self._snooze_button = QtWidgets.QPushButton("Snooze", self)
         self._submit_button.clicked.connect(self._on_submit)
         self._snooze_button.clicked.connect(self._on_snooze)
         self._install_submit_shortcuts()
@@ -93,8 +71,7 @@ class FullScreenPrompt(QtWidgets.QDialog):
         self.setLayout(self._build_layout())
         self.setStyleSheet(STYLESHEET)
 
-    def set_prompt_message(self, prompt_message: str) -> None:
-        self._prompt_message.setText(prompt_message)
+        self.set_prompt_message = self._prompt_card.set_prompt_message
 
     def _install_submit_shortcuts(self) -> None:
         for shortcut in SUBMIT_SHORTCUTS:
@@ -103,9 +80,9 @@ class FullScreenPrompt(QtWidgets.QDialog):
     def _build_layout(self) -> QtWidgets.QVBoxLayout:
         layout = QtWidgets.QVBoxLayout()
         layout.addStretch(2)
-        layout.addWidget(self._prompt_message)
-        layout.addSpacing(24)
-        layout.addWidget(self._prompt_input)
+        layout.addWidget(self._prompt_card)
+        layout.addSpacing(16)
+        layout.addWidget(self._focus_rating_widget)
         layout.addSpacing(24)
         buttons_layout = QtWidgets.QHBoxLayout()
         buttons_layout.addStretch(1)
@@ -119,16 +96,18 @@ class FullScreenPrompt(QtWidgets.QDialog):
     def showEvent(self, event: QtGui.QShowEvent) -> None:
         super().showEvent(event)
         self._answered = False
-        self._prompt_input.setPlainText("")
+        self._focus_rating_widget.set_rating(None)
+        self._prompt_card.clear()
         self.showFullScreen()
         self.raise_()
         self.activateWindow()
-        self._prompt_input.setFocus()
+        self._prompt_card.focus_input()
 
     def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
-        if self.focusWidget() is not self._prompt_input:
-            self._prompt_input.setFocus(QtCore.Qt.FocusReason.ShortcutFocusReason)
-            QtWidgets.QApplication.sendEvent(self._prompt_input, event)
+        input_widget = self._prompt_card.focus_input_widget()
+        if self.focusWidget() is not input_widget:
+            self._prompt_card.focus_input()
+            QtWidgets.QApplication.sendEvent(input_widget, event)
         else:
             super().keyPressEvent(event)
 
@@ -139,11 +118,12 @@ class FullScreenPrompt(QtWidgets.QDialog):
             event.ignore()
 
     def _on_submit(self) -> None:
-        text = self._prompt_input.toPlainText().strip()
-        if text == "":
+        prompt_answer = self._prompt_card.answer()
+        focus_rating = self._focus_rating_widget.rating
+        if prompt_answer == "":
             return
         self._answered = True
-        self.submitted.emit(text)
+        self.submitted.emit(prompt_answer, focus_rating)
 
     def _on_snooze(self) -> None:
         self._answered = True

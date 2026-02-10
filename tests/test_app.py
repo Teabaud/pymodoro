@@ -17,7 +17,7 @@ class DummySignal:
         self._callbacks.append(callback)
 
     def emit(self, *args: Any, **kwargs: Any) -> None:
-        for callback in list(self._callbacks):
+        for callback in list[Callable[..., None]](self._callbacks):
             callback(*args, **kwargs)
 
 
@@ -106,7 +106,7 @@ def config() -> AppConfig:
 def test_pomodoro_app_wires_controllers(monkeypatch: Any, config: AppConfig) -> None:
     monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
     monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
-    monkeypatch.setattr(app_module, "FullScreenPrompt", DummyPrompt)
+    monkeypatch.setattr(app_module, "BreakScreen", DummyPrompt)
 
     dummy_app = DummyApp()
     app = app_module.PomodoroApp(config, app=cast(Any, dummy_app))
@@ -128,18 +128,18 @@ def test_pomodoro_app_wires_controllers(monkeypatch: Any, config: AppConfig) -> 
 def test_show_break_window_reuses_prompt(monkeypatch: Any, config: AppConfig) -> None:
     monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
     monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
-    monkeypatch.setattr(app_module, "FullScreenPrompt", DummyPrompt)
+    monkeypatch.setattr(app_module, "BreakScreen", DummyPrompt)
 
     app = app_module.PomodoroApp(config, app=cast(Any, DummyApp()))
 
     app._show_break_window()
-    prompt = app._fullscreen_window
+    prompt = app._break_screen
     assert prompt is not None
     dummy_prompt = cast(DummyPrompt, prompt)
     assert dummy_prompt.show_called == 1
 
     app._show_break_window()
-    assert app._fullscreen_window is prompt
+    assert app._break_screen is prompt
     assert dummy_prompt.show_called == 1
 
 
@@ -148,12 +148,12 @@ def test_break_snooze_closes_prompt_and_snoozes(
 ) -> None:
     monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
     monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
-    monkeypatch.setattr(app_module, "FullScreenPrompt", DummyPrompt)
+    monkeypatch.setattr(app_module, "BreakScreen", DummyPrompt)
 
     app = app_module.PomodoroApp(config, app=cast(Any, DummyApp()))
     prompt = DummyPrompt()
     app_any = cast(Any, app)
-    app_any._fullscreen_window = prompt
+    app_any._break_screen = prompt
 
     app._on_break_snooze()
 
@@ -165,14 +165,14 @@ def test_break_snooze_closes_prompt_and_snoozes(
 def test_note_submit_closes_prompt(monkeypatch: Any, config: AppConfig) -> None:
     monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
     monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
-    monkeypatch.setattr(app_module, "FullScreenPrompt", DummyPrompt)
+    monkeypatch.setattr(app_module, "BreakScreen", DummyPrompt)
 
     app = app_module.PomodoroApp(config, app=cast(Any, DummyApp()))
     prompt = DummyPrompt()
     app_any = cast(Any, app)
-    app_any._fullscreen_window = prompt
+    app_any._break_screen = prompt
 
-    app._on_note_submit("done")
+    app._on_break_screen_submit("done", None)
 
     assert prompt.closed is True
 
