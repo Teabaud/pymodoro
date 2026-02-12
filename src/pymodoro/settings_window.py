@@ -5,7 +5,12 @@ from dataclasses import dataclass
 from loguru import logger
 from pydantic import ValidationError
 
-from pymodoro.settings import AppSettings, MessagesSettings, TimersSettings, save_settings
+from pymodoro.settings import (
+    AppSettings,
+    MessagesSettings,
+    TimersSettings,
+    save_settings,
+)
 
 # isort: split
 from PySide6 import QtCore, QtGui
@@ -28,8 +33,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-DRAG_HANDLE_CHAR = "\u22EE"
-DELETE_CHAR = "\u00D7"
+DRAG_HANDLE_CHAR = "\u22ee"
+DELETE_CHAR = "\u00d7"
 
 
 @dataclass
@@ -52,6 +57,7 @@ class SettingsDraft:
 class PromptRowWidget(QFrame):
     textChanged = QtCore.Signal()
     deleteRequested = QtCore.Signal(object)
+    blurRequested = QtCore.Signal(object)
 
     def __init__(
         self,
@@ -80,7 +86,9 @@ class PromptRowWidget(QFrame):
 
         self._line_edit = QLineEdit(text)
         self._line_edit.setPlaceholderText("Enter message...")
-        self._line_edit.textChanged.connect(self.textChanged.emit)
+        self._line_edit.textChanged.connect(lambda _: self.textChanged.emit())
+        self._line_edit.installEventFilter(self)
+        self._line_edit.editingFinished.connect(lambda: self.blurRequested.emit(self))
         layout.addWidget(self._line_edit, 1)
 
         self._delete_btn = QPushButton(DELETE_CHAR)
@@ -100,13 +108,20 @@ class PromptRowWidget(QFrame):
         self._delete_btn.setVisible(can_delete)
         self._delete_btn.setEnabled(can_delete)
 
+    def eventFilter(self, watched: QtCore.QObject, event: QtCore.QEvent) -> bool:
+        if watched is self._line_edit and event.type() == QtCore.QEvent.Type.FocusOut:
+            QtCore.QTimer.singleShot(0, lambda: self.blurRequested.emit(self))
+        return super().eventFilter(watched, event)
+
 
 class PromptsEditor(QWidget):
     changed = QtCore.Signal()
+    canAddChanged = QtCore.Signal(bool)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._list = QListWidget()
+        self._has_empty_prompt = False
         self._list.setAlternatingRowColors(False)
         self._list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
         self._list.setDragEnabled(True)
@@ -126,7 +141,7 @@ class PromptsEditor(QWidget):
         initial_prompts = prompts if prompts else [""]
         for prompt in initial_prompts:
             self._append_prompt_row(prompt)
-        self._sync_can_delete()
+        self._sync_ui_state()
 
     def get_prompts(self) -> list[str]:
         prompts: list[str] = []
@@ -138,8 +153,11 @@ class PromptsEditor(QWidget):
         return prompts
 
     def add_prompt(self, text: str = "") -> None:
+        if not text.strip() and self._has_empty_prompt:
+            self._focus_first_empty_prompt()
+            return
         item = self._append_prompt_row(text)
-        self._sync_can_delete()
+        self._sync_ui_state()
         self._list.setCurrentItem(item)
         row = self._row_widget(item)
         if row is not None:
@@ -162,14 +180,15 @@ class PromptsEditor(QWidget):
         prompts.insert(to_index, prompt)
         self.set_prompts(prompts)
         self._list.setCurrentRow(to_index)
-        self._sync_can_delete()
+        self._sync_ui_state()
         self.changed.emit()
 
     def _append_prompt_row(self, text: str) -> QListWidgetItem:
         item = QListWidgetItem()
         row = PromptRowWidget(text=text, can_delete=self._list.count() > 0)
         row.deleteRequested.connect(self._remove_prompt_row)
-        row.textChanged.connect(self.changed.emit)
+        row.textChanged.connect(self._on_row_text_changed)
+        row.blurRequested.connect(self._on_row_blur)
         item.setSizeHint(row.sizeHint())
         self._list.addItem(item)
         self._list.setItemWidget(item, row)
@@ -185,12 +204,53 @@ class PromptsEditor(QWidget):
             if row is row_widget:
                 self._list.takeItem(index)
                 break
-        self._sync_can_delete()
+        self._sync_ui_state()
         self.changed.emit()
 
     def _on_rows_moved(self, *_: object) -> None:
-        self._sync_can_delete()
+        self._sync_ui_state()
         self.changed.emit()
+
+    def can_add_prompt(self) -> bool:
+        return not self._has_empty_prompt
+
+    def _on_row_text_changed(self) -> None:
+        self._sync_ui_state()
+        self.changed.emit()
+
+    def _on_row_blur(self, row_widget: object) -> None:
+        if self._list.count() <= 1:
+            return
+        for index in range(self._list.count()):
+            item = self._list.item(index)
+            row = self._row_widget(item)
+            if row is not None and row is row_widget and not row.text().strip():
+                self._list.takeItem(index)
+                self._sync_ui_state()
+                self.changed.emit()
+                break
+
+    def _focus_first_empty_prompt(self) -> None:
+        for index in range(self._list.count()):
+            item = self._list.item(index)
+            row = self._row_widget(item)
+            if row is not None and not row.text().strip():
+                self._list.setCurrentItem(item)
+                row.focus_editor()
+                return
+
+    def _sync_ui_state(self) -> None:
+        self._sync_can_delete()
+        has_empty_prompt = False
+        for index in range(self._list.count()):
+            item = self._list.item(index)
+            row = self._row_widget(item)
+            if row is not None and not row.text().strip():
+                has_empty_prompt = True
+                break
+        if has_empty_prompt != self._has_empty_prompt:
+            self._has_empty_prompt = has_empty_prompt
+            self.canAddChanged.emit(not has_empty_prompt)
 
     def _sync_can_delete(self) -> None:
         can_delete = self._list.count() > 1
@@ -272,7 +332,11 @@ class SettingsWindow(QDialog):
         self._prompts_editor.changed.connect(self._mark_dirty)
 
         self._add_prompt_btn = QPushButton("Add")
-        self._add_prompt_btn.clicked.connect(lambda: self._prompts_editor.add_prompt(""))
+        self._add_prompt_btn.clicked.connect(
+            lambda: self._prompts_editor.add_prompt("")
+        )
+        self._add_prompt_btn.setEnabled(self._prompts_editor.can_add_prompt())
+        self._prompts_editor.canAddChanged.connect(self._add_prompt_btn.setEnabled)
 
         buttons = QHBoxLayout()
         buttons.addWidget(self._add_prompt_btn)
