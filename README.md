@@ -6,7 +6,7 @@ A lightweight system-tray Pomodoro timer with fullscreen breaks and quick notes.
 - System tray timer with live countdown
 - Fullscreen break prompt with note capture and snooze
 - Pause until a specific time
-- YAML-based configuration with sensible defaults
+- YAML-based settings with sensible defaults
 
 ## Requirements
 - Python 3.12 to 3.14
@@ -36,8 +36,8 @@ With Poetry install
 poetry run pymodoro
 ```
 
-## Configuration
-On first run, `config.yaml` is created in the project root with defaults:
+## Settings
+On first run, `settings.yaml` is created in the project root with defaults:
 
 ```yaml
 timers:

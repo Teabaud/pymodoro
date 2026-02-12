@@ -5,21 +5,21 @@ from pathlib import Path
 import typer
 
 from pymodoro.app import PomodoroApp
-from pymodoro.config import DEFAULT_CONFIG_PATH, load_config
+from pymodoro.settings import DEFAULT_SETTINGS_PATH, load_settings
 
 cli = typer.Typer(add_completion=False)
 
 
 @cli.command()
 def run(
-    config_path: Path = typer.Option(
-        DEFAULT_CONFIG_PATH,
-        "--config",
-        help="Path to config file.",
+    settings_path: Path = typer.Option(
+        DEFAULT_SETTINGS_PATH,
+        "--settings",
+        help="Path to settings file.",
     ),
 ) -> None:
-    config = load_config(config_path)
-    app = PomodoroApp(config=config)
+    settings = load_settings(settings_path)
+    app = PomodoroApp(settings=settings)
     app.launch()
 
 

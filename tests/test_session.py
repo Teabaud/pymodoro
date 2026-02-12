@@ -1,17 +1,33 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
-from PySide6 import QtCore
+from PySide6.QtCore import QDateTime
 
-import pymodoro.session as mode_module
+from pymodoro.settings import AppSettings, MessagesSettings, TimersSettings
 from pymodoro.session import SessionPhase, SessionPhaseManager
 
 
-def test_start_sets_work_mode_and_timer(qcoreapp: QtCore.QCoreApplication) -> None:
-    sp_manager = SessionPhaseManager(
-        work_duration=10, break_duration=5, snooze_duration=2
+def _make_settings(
+    work_duration: int = 10,
+    break_duration: int = 5,
+    snooze_duration: int = 2,
+) -> AppSettings:
+    return AppSettings(
+        timers=TimersSettings(
+            work_duration=work_duration,
+            break_duration=break_duration,
+            snooze_duration=snooze_duration,
+        ),
+        messages=MessagesSettings(work_end_prompts=["Prompt"]),
+        settings_path=Path("/tmp/settings.yaml"),
     )
+
+
+def test_start_sets_work_mode_and_timer() -> None:
+    settings = _make_settings(work_duration=10, break_duration=5, snooze_duration=2)
+    sp_manager = SessionPhaseManager(settings=settings)
 
     sp_manager.start()
 
@@ -19,17 +35,12 @@ def test_start_sets_work_mode_and_timer(qcoreapp: QtCore.QCoreApplication) -> No
     assert sp_manager._phase_timer.interval() == 10_000
 
 
-def test_pause_until_sets_pause_mode_and_interval(
-    qcoreapp: QtCore.QCoreApplication, monkeypatch: Any
-) -> None:
-    sp_manager = SessionPhaseManager(
-        work_duration=10, break_duration=5, snooze_duration=2
-    )
+def test_pause_until_sets_pause_mode_and_interval(monkeypatch: Any) -> None:
+    settings = _make_settings(work_duration=10, break_duration=5, snooze_duration=2)
+    sp_manager = SessionPhaseManager(settings=settings)
 
-    fixed_now = QtCore.QDateTime.fromString("2025-01-01 10:00", "yyyy-MM-dd HH:mm")
-    monkeypatch.setattr(
-        mode_module.QtCore.QDateTime, "currentDateTime", lambda: fixed_now
-    )
+    fixed_now = QDateTime.fromString("2025-01-01 10:00", "yyyy-MM-dd HH:mm")
+    monkeypatch.setattr(QDateTime, "currentDateTime", lambda: fixed_now)
     target = fixed_now.addSecs(90)
 
     sp_manager.pause_until(target)
@@ -38,12 +49,9 @@ def test_pause_until_sets_pause_mode_and_interval(
     assert sp_manager._phase_timer.interval() == 90_000
 
 
-def test_snooze_break_uses_default_duration(
-    qcoreapp: QtCore.QCoreApplication,
-) -> None:
-    sp_manager = SessionPhaseManager(
-        work_duration=10, break_duration=5, snooze_duration=7
-    )
+def test_snooze_break_uses_default_duration() -> None:
+    settings = _make_settings(work_duration=10, break_duration=5, snooze_duration=7)
+    sp_manager = SessionPhaseManager(settings=settings)
 
     sp_manager.snooze_break()
 
@@ -51,12 +59,9 @@ def test_snooze_break_uses_default_duration(
     assert sp_manager._phase_timer.interval() == 7_000
 
 
-def test_timeout_transitions_and_emits_work_end(
-    qcoreapp: QtCore.QCoreApplication,
-) -> None:
-    sp_manager = SessionPhaseManager(
-        work_duration=10, break_duration=5, snooze_duration=2
-    )
+def test_timeout_transitions_and_emits_work_end() -> None:
+    settings = _make_settings(work_duration=10, break_duration=5, snooze_duration=2)
+    sp_manager = SessionPhaseManager(settings=settings)
     work_ended: list[bool] = []
 
     sp_manager.workEnded.connect(lambda: work_ended.append(True))

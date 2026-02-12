@@ -4,6 +4,7 @@ from enum import Enum
 
 from loguru import logger
 
+from pymodoro.settings import AppSettings
 from pymodoro.time_utils import TimeFormatter
 
 # isort: split
@@ -22,15 +23,11 @@ class SessionPhaseManager(QtCore.QObject):
 
     def __init__(
         self,
-        work_duration: int,
-        break_duration: int,
-        snooze_duration: int,
+        settings: AppSettings,
         parent: QtCore.QObject | None = None,
     ) -> None:
         super().__init__(parent)
-        self._work_duration = work_duration
-        self._break_duration = break_duration
-        self._snooze_duration = snooze_duration
+        self._settings = settings
 
         self._phase = SessionPhase.BREAK
         self._phase_timer = QtCore.QTimer(self)
@@ -42,38 +39,42 @@ class SessionPhaseManager(QtCore.QObject):
         return self._phase
 
     def start(self) -> None:
-        self._start_phase(phase=SessionPhase.WORK, duration_seconds=self._work_duration)
+        self._start_work()
 
     def resume(self) -> None:
         if self._phase == SessionPhase.PAUSE:
-            self._start_phase(
-                phase=SessionPhase.WORK, duration_seconds=self._work_duration
-            )
+            self._start_work()
 
     def pause_until(self, target_datetime: QtCore.QDateTime) -> None:
         pause_seconds = QtCore.QDateTime.currentDateTime().secsTo(target_datetime)
-        self._start_phase(phase=SessionPhase.PAUSE, duration_seconds=pause_seconds)
+        self._start_pause(pause_seconds)
 
     def snooze_break(self, seconds: int | None = None) -> None:
-        if seconds is None:
-            seconds = self._snooze_duration
-        self._start_phase(phase=SessionPhase.WORK, duration_seconds=seconds)
+        seconds = seconds or self._settings.timers.snooze_duration
+        self._start_work(seconds)
 
     def _on_phase_timer_timeout(self) -> None:
         if self._phase == SessionPhase.WORK:
             self.workEnded.emit()
-            self._start_phase(
-                phase=SessionPhase.BREAK, duration_seconds=self._break_duration
-            )
+            self._start_break()
         else:
-            self._start_phase(
-                phase=SessionPhase.WORK, duration_seconds=self._work_duration
-            )
+            self._start_work()
 
-    def _start_phase(self, phase: SessionPhase, duration_seconds: int) -> None:
+    def _start_work(self, seconds: int | None = None) -> None:
+        seconds = seconds or self._settings.timers.work_duration
+        self._start_phase(SessionPhase.WORK, seconds)
+
+    def _start_break(self, seconds: int | None = None) -> None:
+        seconds = seconds or self._settings.timers.break_duration
+        self._start_phase(SessionPhase.BREAK, seconds)
+
+    def _start_pause(self, seconds: int) -> None:
+        self._start_phase(SessionPhase.PAUSE, seconds)
+
+    def _start_phase(self, phase: SessionPhase, seconds: int) -> None:
         previous_phase = self._phase
         self._phase_timer.stop()
-        self._phase_timer.setInterval(duration_seconds * 1000)
+        self._phase_timer.setInterval(seconds * 1000)
         self._phase_timer.start()
         self._phase = phase
         self.phaseChanged.emit(previous_phase, phase)

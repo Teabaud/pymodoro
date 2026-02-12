@@ -6,7 +6,7 @@ from typing import Any, Callable, cast
 import pytest
 
 import pymodoro.app as app_module
-from pymodoro.config import AppConfig, MessagesConfig, TimersConfig
+from pymodoro.settings import AppSettings, MessagesSettings, TimersSettings
 
 
 class DummySignal:
@@ -45,6 +45,7 @@ class DummySessionPhaseManager:
 
 class DummyTrayController:
     def __init__(self, *_: Any, **__: Any) -> None:
+        self.openAppRequested = DummySignal()
         self.pauseUntilRequested = DummySignal()
         self.resumeRequested = DummySignal()
         self.quitRequested = DummySignal()
@@ -95,21 +96,43 @@ class DummyApp:
         self.quit_called = True
 
 
+class DummySettingsWindow:
+    def __init__(self, settings: AppSettings) -> None:
+        self.settings = settings
+        self.settingsSaved = DummySignal()
+        self.show_called = False
+        self._visible = False
+
+    def isVisible(self) -> bool:
+        return self._visible
+
+    def raise_(self) -> None:
+        self._visible = True
+
+    def activateWindow(self) -> None:
+        self._visible = True
+
+    def show(self) -> None:
+        self.show_called = True
+        self._visible = True
+
+
 @pytest.fixture
-def config() -> AppConfig:
-    return AppConfig(
-        messages=MessagesConfig(work_end_prompts=["Break time?"]),
-        timers=TimersConfig(work_duration=10, break_duration=5, snooze_duration=3),
+def settings(tmp_path: Any) -> AppSettings:
+    return AppSettings(
+        messages=MessagesSettings(work_end_prompts=["Break time?"]),
+        timers=TimersSettings(work_duration=10, break_duration=5, snooze_duration=3),
+        settings_path=tmp_path / "settings.yaml",
     )
 
 
-def test_pomodoro_app_wires_controllers(monkeypatch: Any, config: AppConfig) -> None:
+def test_pomodoro_app_wires_controllers(monkeypatch: Any, settings: AppSettings) -> None:
     monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
     monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
     monkeypatch.setattr(app_module, "BreakScreen", DummyPrompt)
 
     dummy_app = DummyApp()
-    app = app_module.PomodoroApp(config, app=cast(Any, dummy_app))
+    app = app_module.PomodoroApp(settings, app=cast(Any, dummy_app))
 
     phase_manager = cast(DummySessionPhaseManager, app._sp_manager)
     tray_controller = cast(DummyTrayController, app._tray_controller)
@@ -125,12 +148,12 @@ def test_pomodoro_app_wires_controllers(monkeypatch: Any, config: AppConfig) -> 
     assert dummy_app.exec_called is True
 
 
-def test_show_break_window_reuses_prompt(monkeypatch: Any, config: AppConfig) -> None:
+def test_show_break_window_reuses_prompt(monkeypatch: Any, settings: AppSettings) -> None:
     monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
     monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
     monkeypatch.setattr(app_module, "BreakScreen", DummyPrompt)
 
-    app = app_module.PomodoroApp(config, app=cast(Any, DummyApp()))
+    app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
 
     app._show_break_window()
     prompt = app._break_screen
@@ -144,13 +167,13 @@ def test_show_break_window_reuses_prompt(monkeypatch: Any, config: AppConfig) ->
 
 
 def test_break_snooze_closes_prompt_and_snoozes(
-    monkeypatch: Any, config: AppConfig
+    monkeypatch: Any, settings: AppSettings
 ) -> None:
     monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
     monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
     monkeypatch.setattr(app_module, "BreakScreen", DummyPrompt)
 
-    app = app_module.PomodoroApp(config, app=cast(Any, DummyApp()))
+    app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
     prompt = DummyPrompt()
     app_any = cast(Any, app)
     app_any._break_screen = prompt
@@ -162,12 +185,12 @@ def test_break_snooze_closes_prompt_and_snoozes(
     assert phase_manager.snooze_break_called is True
 
 
-def test_note_submit_closes_prompt(monkeypatch: Any, config: AppConfig) -> None:
+def test_note_submit_closes_prompt(monkeypatch: Any, settings: AppSettings) -> None:
     monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
     monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
     monkeypatch.setattr(app_module, "BreakScreen", DummyPrompt)
 
-    app = app_module.PomodoroApp(config, app=cast(Any, DummyApp()))
+    app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
     prompt = DummyPrompt()
     app_any = cast(Any, app)
     app_any._break_screen = prompt
@@ -177,18 +200,19 @@ def test_note_submit_closes_prompt(monkeypatch: Any, config: AppConfig) -> None:
     assert prompt.closed is True
 
 
-def test_work_end_prompt_selection_not_constant(monkeypatch: Any) -> None:
+def test_work_end_prompt_selection_not_constant(monkeypatch: Any, tmp_path: Any) -> None:
     monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
     monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
     rng = random.Random(0)
     monkeypatch.setattr(app_module.random, "choice", rng.choice)
 
     prompts = [f"Prompt {index}" for index in range(10)]
-    config = AppConfig(
-        messages=MessagesConfig(work_end_prompts=prompts),
-        timers=TimersConfig(work_duration=10, break_duration=5, snooze_duration=3),
+    settings = AppSettings(
+        messages=MessagesSettings(work_end_prompts=prompts),
+        timers=TimersSettings(work_duration=10, break_duration=5, snooze_duration=3),
+        settings_path=tmp_path / "settings.yaml",
     )
-    app = app_module.PomodoroApp(config, app=cast(Any, DummyApp()))
+    app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
 
     selections = [app._select_work_end_prompt() for _ in range(10)]
 
@@ -204,3 +228,21 @@ def test_work_end_prompt_selection_not_constant(monkeypatch: Any) -> None:
         "Prompt 7",
         "Prompt 5",
     ]
+
+
+def test_settings_saved_refreshes_tray(monkeypatch: Any, settings: AppSettings) -> None:
+    monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
+    monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
+    monkeypatch.setattr(app_module, "BreakScreen", DummyPrompt)
+    monkeypatch.setattr(app_module, "SettingsWindow", DummySettingsWindow)
+
+    app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
+    tray_controller = cast(DummyTrayController, app._tray_controller)
+    tray_controller.refresh_called = False
+
+    app._open_settings_window()
+    settings_window = cast(DummySettingsWindow, app._settings_window)
+    settings_window.settingsSaved.emit()
+
+    assert settings_window.show_called is True
+    assert tray_controller.refresh_called is True

@@ -4,7 +4,8 @@ import random
 
 from loguru import logger
 
-from pymodoro.config import AppConfig
+from pymodoro.settings import AppSettings
+from pymodoro.settings_window import SettingsWindow
 from pymodoro.session import SessionPhaseManager
 from pymodoro.tray import TrayController
 from pymodoro.break_screen import BreakScreen
@@ -25,17 +26,12 @@ def _get_qt_app() -> QApplication:
 
 
 class PomodoroApp(QtCore.QObject):
-    def __init__(self, config: AppConfig, app: QApplication | None = None) -> None:
+    def __init__(self, settings: AppSettings, app: QApplication | None = None) -> None:
         super().__init__()
         self._app = app or _get_qt_app()
+        self._settings = settings
 
-        self._work_end_prompts = config.messages.work_end_prompts
-
-        self._sp_manager = SessionPhaseManager(
-            work_duration=config.timers.work_duration,
-            break_duration=config.timers.break_duration,
-            snooze_duration=config.timers.snooze_duration,
-        )
+        self._sp_manager = SessionPhaseManager(settings=settings)
         self._tray_controller = TrayController(self._app, self._sp_manager)
 
         self._sp_manager.phaseChanged.connect(self._tray_controller.refresh)
@@ -43,13 +39,27 @@ class PomodoroApp(QtCore.QObject):
         self._tray_controller.pauseUntilRequested.connect(self._sp_manager.pause_until)
         self._tray_controller.resumeRequested.connect(self._sp_manager.resume)
         self._tray_controller.quitRequested.connect(self._app.quit)
+        self._tray_controller.openAppRequested.connect(self._open_settings_window)
 
         self._sp_manager.start()
         self._tray_controller.show()
 
         self._break_screen: BreakScreen | None = None
+        self._settings_window: SettingsWindow | None = None
 
         self.launch = self._app.exec
+
+    def _open_settings_window(self) -> None:
+        if self._settings_window is not None and self._settings_window.isVisible():
+            self._settings_window.raise_()
+            self._settings_window.activateWindow()
+            return
+        self._settings_window = SettingsWindow(self._settings)
+        self._settings_window.settingsSaved.connect(self._on_settings_saved)
+        self._settings_window.show()
+
+    def _on_settings_saved(self) -> None:
+        self._tray_controller.refresh()
 
     def _show_break_window(self) -> None:
         if self._break_screen and self._break_screen.isVisible():
@@ -76,4 +86,4 @@ class PomodoroApp(QtCore.QObject):
             self._break_screen.close()
 
     def _select_work_end_prompt(self) -> str:
-        return random.choice(self._work_end_prompts)
+        return random.choice(self._settings.messages.work_end_prompts)

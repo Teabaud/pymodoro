@@ -14,6 +14,7 @@ TRAY_ICON_LABELS = {
 
 
 class TrayController(QtCore.QObject):
+    openAppRequested = QtCore.Signal()
     pauseUntilRequested = QtCore.Signal(object)
     resumeRequested = QtCore.Signal()
     quitRequested = QtCore.Signal()
@@ -29,6 +30,8 @@ class TrayController(QtCore.QObject):
 
         self._tray = QtWidgets.QSystemTrayIcon(app)
         self._menu = QtWidgets.QMenu()
+        self._action_open_app = self._menu.addAction("Open App")
+        self._action_open_app.triggered.connect(self.openAppRequested.emit)
         self._action_pause = self._menu.addAction("Pause until...")
         self._action_pause.triggered.connect(self._on_pause_action)
         self._action_quit = self._menu.addAction("Quit")
