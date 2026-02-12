@@ -1,7 +1,14 @@
 from __future__ import annotations
 
 from PySide6 import QtCore
-from PySide6.QtWidgets import QPushButton, QWidget, QPlainTextEdit, QLabel, QVBoxLayout, QHBoxLayout
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QPlainTextEdit,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 
 class PromptCard(QWidget):
@@ -45,6 +52,8 @@ class PromptCard(QWidget):
 
 
 type FocusRating = int | None
+
+
 class FocusRatingWidget(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -86,9 +95,7 @@ class FocusRatingWidget(QWidget):
             }
         """)
 
-    def _make_button_handler(
-        self, value: int, button: QPushButton
-    ):
+    def _make_button_handler(self, value: int, button: QPushButton):
         def handler() -> None:
             if self._rating == value:
                 # Clicking the same value again clears the rating (skip)

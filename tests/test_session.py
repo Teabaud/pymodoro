@@ -5,8 +5,8 @@ from typing import Any
 
 from PySide6.QtCore import QDateTime
 
-from pymodoro.settings import AppSettings, MessagesSettings, TimersSettings
 from pymodoro.session import SessionPhase, SessionPhaseManager
+from pymodoro.settings import AppSettings, MessagesSettings, TimersSettings
 
 
 def _make_settings(

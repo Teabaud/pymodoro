@@ -7,11 +7,7 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from pymodoro.settings import (
-    DEFAULT_SETTINGS_YAML,
-    load_settings,
-    save_settings,
-)
+from pymodoro.settings import DEFAULT_SETTINGS_YAML, load_settings, save_settings
 
 
 def test_load_settings_creates_default_file(tmp_path: Path) -> None:
@@ -20,9 +16,7 @@ def test_load_settings_creates_default_file(tmp_path: Path) -> None:
     settings = load_settings(settings_path)
 
     assert settings_path.exists()
-    assert (
-        settings_path.read_text(encoding="utf-8") == DEFAULT_SETTINGS_YAML
-    )
+    assert settings_path.read_text(encoding="utf-8") == DEFAULT_SETTINGS_YAML
     assert settings.timers.work_duration == 1500
     assert settings.timers.break_duration == 300
     assert settings.timers.snooze_duration == 60

@@ -38,7 +38,9 @@ class AppSettings(BaseModel):
     settings_path: Path
 
 
-def _get_or_create_settings_file(settings_path: Path) -> dict[str, Any | dict[str, Any]]:
+def _get_or_create_settings_file(
+    settings_path: Path,
+) -> dict[str, Any | dict[str, Any]]:
     if not settings_path.exists():
         logger.info("Settings file not found, creating: {}", settings_path)
         settings_path.write_text(DEFAULT_SETTINGS_YAML, encoding="utf-8")
@@ -50,9 +52,7 @@ def load_settings(
 ) -> AppSettings:
     logger.info("Loading settings from: {}", settings_path)
     raw_settings = _get_or_create_settings_file(settings_path)
-    return AppSettings.model_validate(
-        {**raw_settings, "settings_path": settings_path}
-    )
+    return AppSettings.model_validate({**raw_settings, "settings_path": settings_path})
 
 
 def save_settings(settings: AppSettings) -> None:

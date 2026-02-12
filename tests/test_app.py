@@ -126,7 +126,9 @@ def settings(tmp_path: Any) -> AppSettings:
     )
 
 
-def test_pomodoro_app_wires_controllers(monkeypatch: Any, settings: AppSettings) -> None:
+def test_pomodoro_app_wires_controllers(
+    monkeypatch: Any, settings: AppSettings
+) -> None:
     monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
     monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
     monkeypatch.setattr(app_module, "BreakScreen", DummyPrompt)
@@ -148,7 +150,9 @@ def test_pomodoro_app_wires_controllers(monkeypatch: Any, settings: AppSettings)
     assert dummy_app.exec_called is True
 
 
-def test_show_break_window_reuses_prompt(monkeypatch: Any, settings: AppSettings) -> None:
+def test_show_break_window_reuses_prompt(
+    monkeypatch: Any, settings: AppSettings
+) -> None:
     monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
     monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
     monkeypatch.setattr(app_module, "BreakScreen", DummyPrompt)
@@ -200,7 +204,9 @@ def test_note_submit_closes_prompt(monkeypatch: Any, settings: AppSettings) -> N
     assert prompt.closed is True
 
 
-def test_work_end_prompt_selection_not_constant(monkeypatch: Any, tmp_path: Any) -> None:
+def test_work_end_prompt_selection_not_constant(
+    monkeypatch: Any, tmp_path: Any
+) -> None:
     monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
     monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
     rng = random.Random(0)

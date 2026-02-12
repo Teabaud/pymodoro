@@ -4,11 +4,11 @@ import random
 
 from loguru import logger
 
+from pymodoro.break_screen import BreakScreen
+from pymodoro.session import SessionPhaseManager
 from pymodoro.settings import AppSettings
 from pymodoro.settings_window import SettingsWindow
-from pymodoro.session import SessionPhaseManager
 from pymodoro.tray import TrayController
-from pymodoro.break_screen import BreakScreen
 
 # isort: split
 from PySide6 import QtCore

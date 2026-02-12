@@ -22,6 +22,9 @@ pymodoro = "pymodoro.cli:main"
 [tool.poetry]
 packages = [{include = "pymodoro", from = "src"}]
 
+[tool.isort]
+profile = "black"
+
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
