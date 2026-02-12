@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
 
 DRAG_HANDLE_CHAR = "\u22ee"
 DELETE_CHAR = "\u00d7"
+DURATION_INPUT_MAX_WIDTH = 120
 
 
 @dataclass
@@ -306,6 +307,7 @@ class SettingsWindow(QDialog):
         self._work_duration.setSuffix(" s")
         self._work_duration.setValue(self._draft.work_duration)
         self._work_duration.valueChanged.connect(self._mark_dirty)
+        self._configure_duration_input(self._work_duration)
         form.addRow("Work duration:", self._work_duration)
 
         self._break_duration = QSpinBox()
@@ -313,6 +315,7 @@ class SettingsWindow(QDialog):
         self._break_duration.setSuffix(" s")
         self._break_duration.setValue(self._draft.break_duration)
         self._break_duration.valueChanged.connect(self._mark_dirty)
+        self._configure_duration_input(self._break_duration)
         form.addRow("Break duration:", self._break_duration)
 
         self._snooze_duration = QSpinBox()
@@ -320,6 +323,7 @@ class SettingsWindow(QDialog):
         self._snooze_duration.setSuffix(" s")
         self._snooze_duration.setValue(self._draft.snooze_duration)
         self._snooze_duration.valueChanged.connect(self._mark_dirty)
+        self._configure_duration_input(self._snooze_duration)
         form.addRow("Snooze duration:", self._snooze_duration)
         return group
 
@@ -335,19 +339,23 @@ class SettingsWindow(QDialog):
         self._add_prompt_btn.clicked.connect(
             lambda: self._prompts_editor.add_prompt("")
         )
+        self._add_prompt_btn.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
         self._add_prompt_btn.setEnabled(self._prompts_editor.can_add_prompt())
         self._prompts_editor.canAddChanged.connect(self._add_prompt_btn.setEnabled)
 
-        buttons = QHBoxLayout()
-        buttons.addWidget(self._add_prompt_btn)
-        buttons.addStretch()
-
         layout.addWidget(self._prompts_editor)
-        layout.addLayout(buttons)
+        layout.addWidget(self._add_prompt_btn)
         return group
 
     def _mark_dirty(self) -> None:
         self._dirty = True
+
+    def _configure_duration_input(self, spin_box: QSpinBox) -> None:
+        spin_box.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        spin_box.setMaximumWidth(DURATION_INPUT_MAX_WIDTH)
 
     def _build_timers_from_form(self) -> TimersSettings:
         return TimersSettings(
@@ -389,6 +397,12 @@ class SettingsWindow(QDialog):
 
     def _on_cancel(self) -> None:
         self.close()
+
+    def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
+        if event.key() in (QtCore.Qt.Key.Key_Return, QtCore.Qt.Key.Key_Enter):
+            event.ignore()
+            return
+        super().keyPressEvent(event)
 
     def _confirm_close_for_dirty_state(self) -> QMessageBox.StandardButton:
         message_box = QMessageBox(self)

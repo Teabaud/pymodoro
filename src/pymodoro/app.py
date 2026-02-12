@@ -11,8 +11,20 @@ from pymodoro.settings_window import SettingsWindow
 from pymodoro.tray import TrayController
 
 # isort: split
-from PySide6 import QtCore
+from PySide6 import QtCore, QtGui
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
+
+
+def _apply_theme(app: QApplication) -> None:
+    app.setStyle("Fusion")
+    palette = QtGui.QPalette()
+    palette.setColor(QtGui.QPalette.ColorRole.Window, QtGui.QColor(37, 37, 38))
+    palette.setColor(QtGui.QPalette.ColorRole.Base, QtGui.QColor(30, 30, 30))
+    palette.setColor(QtGui.QPalette.ColorRole.Button, QtGui.QColor(45, 45, 48))
+    palette.setColor(QtGui.QPalette.ColorRole.Text, QtGui.QColor(235, 235, 235))
+    palette.setColor(QtGui.QPalette.ColorRole.ButtonText, QtGui.QColor(235, 235, 235))
+    palette.setColor(QtGui.QPalette.ColorRole.Highlight, QtGui.QColor(0, 122, 204))
+    app.setPalette(palette)
 
 
 def _get_qt_app() -> QApplication:
@@ -20,6 +32,7 @@ def _get_qt_app() -> QApplication:
     app.setQuitOnLastWindowClosed(False)
     app.setApplicationName("Pymodoro")
     app.setDesktopFileName("pymodoro")
+    _apply_theme(app)
     if not QSystemTrayIcon.isSystemTrayAvailable():
         raise RuntimeError("System tray is not available in this session.")
     return app

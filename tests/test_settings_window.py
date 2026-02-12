@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 from PySide6 import QtCore, QtGui
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QMessageBox, QSizePolicy
 
 from pymodoro.settings import AppSettings, MessagesSettings, TimersSettings
 from pymodoro.settings_window import SettingsWindow
@@ -146,6 +146,43 @@ def test_save_updates_settings_and_emits_signal(
     assert write_calls == [settings]
     assert saved == [True]
     assert window._dirty is False
+
+
+def test_pressing_enter_does_not_trigger_save(
+    qcoreapp: Any, monkeypatch: Any, settings: AppSettings
+) -> None:
+    window = SettingsWindow(settings)
+    save_attempts: list[bool] = []
+    monkeypatch.setattr(window, "_try_save", lambda: save_attempts.append(True) or True)
+
+    key_press = QtGui.QKeyEvent(
+        QtCore.QEvent.Type.KeyPress,
+        QtCore.Qt.Key.Key_Return,
+        QtCore.Qt.KeyboardModifier.NoModifier,
+    )
+    key_release = QtGui.QKeyEvent(
+        QtCore.QEvent.Type.KeyRelease,
+        QtCore.Qt.Key.Key_Return,
+        QtCore.Qt.KeyboardModifier.NoModifier,
+    )
+    qcoreapp.sendEvent(window, key_press)
+    qcoreapp.sendEvent(window, key_release)
+
+    assert save_attempts == []
+
+
+def test_add_button_full_width_and_compact_duration_inputs(
+    qcoreapp: Any, settings: AppSettings
+) -> None:
+    window = SettingsWindow(settings)
+
+    assert (
+        window._add_prompt_btn.sizePolicy().horizontalPolicy()
+        == QSizePolicy.Policy.Expanding
+    )
+    assert window._work_duration.maximumWidth() == 120
+    assert window._break_duration.maximumWidth() == 120
+    assert window._snooze_duration.maximumWidth() == 120
 
 
 def test_close_event_cancel_keeps_window_open(
