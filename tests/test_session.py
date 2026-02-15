@@ -76,3 +76,53 @@ def test_timeout_transitions_and_emits_work_end() -> None:
     sp_manager._on_phase_timer_timeout()
     assert sp_manager.session_phase == SessionPhase.WORK
     assert sp_manager._phase_timer.interval() == 10_000
+
+
+def test_start_work_phase_uses_default_when_seconds_not_provided() -> None:
+    settings = _make_settings(work_duration=11, break_duration=5, snooze_duration=2)
+    sp_manager = SessionPhaseManager(settings=settings)
+
+    sp_manager.start_work_phase()
+
+    assert sp_manager.session_phase == SessionPhase.WORK
+    assert sp_manager._phase_timer.interval() == 11_000
+
+
+def test_start_break_phase_uses_default_when_seconds_not_provided() -> None:
+    settings = _make_settings(work_duration=10, break_duration=7, snooze_duration=2)
+    sp_manager = SessionPhaseManager(settings=settings)
+
+    sp_manager.start_break_phase()
+
+    assert sp_manager.session_phase == SessionPhase.BREAK
+    assert sp_manager._phase_timer.interval() == 7_000
+
+
+def test_manual_start_methods_override_duration() -> None:
+    settings = _make_settings(work_duration=10, break_duration=5, snooze_duration=2)
+    sp_manager = SessionPhaseManager(settings=settings)
+
+    sp_manager.start_work_phase(seconds=3)
+    assert sp_manager.session_phase == SessionPhase.WORK
+    assert sp_manager._phase_timer.interval() == 3_000
+
+    sp_manager.start_break_phase(seconds=2)
+    assert sp_manager.session_phase == SessionPhase.BREAK
+    assert sp_manager._phase_timer.interval() == 2_000
+
+
+def test_manual_start_methods_force_switch_from_pause_and_other_phase() -> None:
+    settings = _make_settings(work_duration=10, break_duration=5, snooze_duration=2)
+    sp_manager = SessionPhaseManager(settings=settings)
+
+    target = QDateTime.currentDateTime().addSecs(120)
+    sp_manager.pause_until(target)
+    assert sp_manager.session_phase == SessionPhase.PAUSE
+
+    sp_manager.start_break_phase(seconds=1)
+    assert sp_manager.session_phase == SessionPhase.BREAK
+    assert sp_manager._phase_timer.interval() == 1_000
+
+    sp_manager.start_work_phase(seconds=2)
+    assert sp_manager.session_phase == SessionPhase.WORK
+    assert sp_manager._phase_timer.interval() == 2_000

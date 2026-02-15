@@ -5,6 +5,8 @@ from pymodoro.settings import MessagesSettings, TimersSettings
 # isort: split
 from PySide6 import QtCore
 from PySide6.QtWidgets import (
+    QDialog,
+    QDialogButtonBox,
     QFormLayout,
     QFrame,
     QGroupBox,
@@ -238,17 +240,58 @@ class PromptsEditor(QWidget):
 
 
 class SessionSectionWidget(QGroupBox):
+    startWorkClicked = QtCore.Signal()
+    startBreakClicked = QtCore.Signal()
     pauseResumeClicked = QtCore.Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__("Session", parent)
-        layout = QVBoxLayout(self)
+        layout = QHBoxLayout(self)
+        self.start_work_button = QPushButton("Start work")
+        self.start_work_button.clicked.connect(self.startWorkClicked.emit)
+        layout.addWidget(self.start_work_button)
+
+        self.start_break_button = QPushButton("Start break")
+        self.start_break_button.clicked.connect(self.startBreakClicked.emit)
+        layout.addWidget(self.start_break_button)
+
         self.pause_resume_button = QPushButton("Pause until...")
         self.pause_resume_button.clicked.connect(self.pauseResumeClicked.emit)
         layout.addWidget(self.pause_resume_button)
 
     def set_paused(self, paused: bool) -> None:
         self.pause_resume_button.setText("Resume" if paused else "Pause until...")
+
+
+class DurationSelectionDialog(QDialog):
+    def __init__(
+        self,
+        title: str,
+        default_minutes: int,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setModal(True)
+
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+        self._minutes_input = QSpinBox(self)
+        self._minutes_input.setRange(1, 720)
+        self._minutes_input.setSuffix(" min")
+        self._minutes_input.setValue(default_minutes)
+        form.addRow("Duration:", self._minutes_input)
+        layout.addLayout(form)
+
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        layout.addWidget(button_box)
+
+    def selected_minutes(self) -> int:
+        return self._minutes_input.value()
 
 
 class DurationInputWidget(QSpinBox):

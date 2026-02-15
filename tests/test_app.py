@@ -30,6 +30,8 @@ class DummySessionPhaseManager:
         self.pause_until_called: list[Any] = []
         self.resume_called = False
         self.snooze_break_called = False
+        self.start_work_phase_called: list[int] = []
+        self.start_break_phase_called: list[int] = []
         self.session_phase = SessionPhase.WORK
 
     def start(self) -> None:
@@ -43,6 +45,12 @@ class DummySessionPhaseManager:
 
     def snooze_break(self) -> None:
         self.snooze_break_called = True
+
+    def start_work_phase(self, minutes: int) -> None:
+        self.start_work_phase_called.append(minutes)
+
+    def start_break_phase(self, minutes: int) -> None:
+        self.start_break_phase_called.append(minutes)
 
 
 class DummyTrayController:
@@ -104,6 +112,8 @@ class DummySettingsWindow:
         self.settingsSaved = DummySignal()
         self.pauseUntilRequested = DummySignal()
         self.resumeRequested = DummySignal()
+        self.startWorkRequested = DummySignal()
+        self.startBreakRequested = DummySignal()
         self.show_called = False
         self._visible = False
         self.paused_states: list[bool] = []
@@ -158,6 +168,8 @@ def test_pomodoro_app_wires_controllers(
     settings_window = cast(DummySettingsWindow, app._settings_window)
     assert phase_manager.pause_until in settings_window.pauseUntilRequested._callbacks
     assert phase_manager.resume in settings_window.resumeRequested._callbacks
+    assert phase_manager.start_work_phase in settings_window.startWorkRequested._callbacks
+    assert phase_manager.start_break_phase in settings_window.startBreakRequested._callbacks
     assert dummy_app.quit in tray_controller.quitRequested._callbacks
     app.launch()
     assert dummy_app.exec_called is True
@@ -181,6 +193,24 @@ def test_show_break_window_reuses_prompt(
     app._show_break_window()
     assert app._break_screen is prompt
     assert dummy_prompt.show_called == 1
+
+
+def test_start_break_from_settings_starts_break(
+    monkeypatch: Any, settings: AppSettings
+) -> None:
+    monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
+    monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
+    monkeypatch.setattr(app_module, "BreakScreen", DummyPrompt)
+    monkeypatch.setattr(app_module, "SettingsWindow", DummySettingsWindow)
+
+    app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
+    app._open_settings_window()
+    settings_window = cast(DummySettingsWindow, app._settings_window)
+
+    settings_window.startBreakRequested.emit(12)
+
+    phase_manager = cast(DummySessionPhaseManager, app._sp_manager)
+    assert phase_manager.start_break_phase_called == [12]
 
 
 def test_break_snooze_closes_prompt_and_snoozes(

@@ -10,6 +10,7 @@ from pymodoro.settings import (
     save_settings,
 )
 from pymodoro.settings_window_widgets import (
+    DurationSelectionDialog,
     MessagesSectionWidget,
     SessionSectionWidget,
     TimersSectionWidget,
@@ -46,6 +47,8 @@ class SettingsWindow(QDialog):
     settingsSaved = QtCore.Signal()
     pauseUntilRequested = QtCore.Signal(object)
     resumeRequested = QtCore.Signal()
+    startWorkRequested = QtCore.Signal(int)
+    startBreakRequested = QtCore.Signal(int)
 
     def __init__(
         self,
@@ -71,6 +74,8 @@ class SettingsWindow(QDialog):
         self._messages_group = MessagesSectionWidget(prompts=self._draft.prompts)
 
         self._session_group.pauseResumeClicked.connect(self._on_pause_resume_clicked)
+        self._session_group.startWorkClicked.connect(self._on_start_work_clicked)
+        self._session_group.startBreakClicked.connect(self._on_start_break_clicked)
         self._timers_group.changed.connect(self._mark_dirty)
         self._messages_group.changed.connect(self._mark_dirty)
 
@@ -95,7 +100,8 @@ class SettingsWindow(QDialog):
         default_datetime = QtCore.QDateTime.currentDateTime().addSecs(3600)
         dialog = PauseUntilDialog(default_datetime, self)
         accepted_code = getattr(getattr(QDialog, "DialogCode", None), "Accepted", 1)
-        return dialog.selected_datetime() if (dialog.exec() == accepted_code) else None
+        if dialog.exec() == accepted_code:
+            return dialog.selected_datetime()
 
     def _on_pause_resume_clicked(self) -> None:
         if self._is_paused:
@@ -104,6 +110,26 @@ class SettingsWindow(QDialog):
         pause_datetime = self._prompt_pause_until()
         if pause_datetime is not None:
             self.pauseUntilRequested.emit(pause_datetime)
+
+    def _prompt_duration(self, title: str, default_seconds: int) -> int | None:
+        dialog = DurationSelectionDialog(title, default_seconds // 60, self)
+        accepted_code = getattr(getattr(QDialog, "DialogCode", None), "Accepted", 1)
+        if dialog.exec() == accepted_code:
+            return dialog.selected_minutes() * 60
+
+    def _on_start_work_clicked(self) -> None:
+        seconds = self._prompt_duration(
+            "Start work phase", self._settings.timers.work_duration
+        )
+        if seconds is not None:
+            self.startWorkRequested.emit(seconds)
+
+    def _on_start_break_clicked(self) -> None:
+        seconds = self._prompt_duration(
+            "Start break phase", self._settings.timers.break_duration
+        )
+        if seconds is not None:
+            self.startBreakRequested.emit(seconds)
 
     def _mark_dirty(self) -> None:
         self._dirty = True

@@ -39,11 +39,11 @@ class SessionPhaseManager(QtCore.QObject):
         return self._phase
 
     def start(self) -> None:
-        self._start_work()
+        self.start_work_phase()
 
     def resume(self) -> None:
         if self._phase == SessionPhase.PAUSE:
-            self._start_work()
+            self.start_work_phase()
 
     def pause_until(self, target_datetime: QtCore.QDateTime) -> None:
         pause_seconds = QtCore.QDateTime.currentDateTime().secsTo(target_datetime)
@@ -51,20 +51,20 @@ class SessionPhaseManager(QtCore.QObject):
 
     def snooze_break(self, seconds: int | None = None) -> None:
         seconds = seconds or self._settings.timers.snooze_duration
-        self._start_work(seconds)
+        self.start_work_phase(seconds)
 
     def _on_phase_timer_timeout(self) -> None:
         if self._phase == SessionPhase.WORK:
             self.workEnded.emit()
-            self._start_break()
+            self.start_break_phase()
         else:
-            self._start_work()
+            self.start_work_phase()
 
-    def _start_work(self, seconds: int | None = None) -> None:
+    def start_work_phase(self, seconds: int | None = None) -> None:
         seconds = seconds or self._settings.timers.work_duration
         self._start_phase(SessionPhase.WORK, seconds)
 
-    def _start_break(self, seconds: int | None = None) -> None:
+    def start_break_phase(self, seconds: int | None = None) -> None:
         seconds = seconds or self._settings.timers.break_duration
         self._start_phase(SessionPhase.BREAK, seconds)
 

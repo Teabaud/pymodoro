@@ -244,6 +244,15 @@ def test_pause_resume_button_text_follows_paused_state(
     assert window._session_group.pause_resume_button.text() == "Pause until..."
 
 
+def test_session_group_exposes_start_work_and_start_break_buttons(
+    qcoreapp: Any, settings: AppSettings
+) -> None:
+    window = SettingsWindow(settings)
+
+    assert window._session_group.start_work_button.text() == "Start work"
+    assert window._session_group.start_break_button.text() == "Start break"
+
+
 def test_pause_resume_button_emits_resume_when_paused(
     qcoreapp: Any, settings: AppSettings
 ) -> None:
@@ -269,3 +278,46 @@ def test_pause_resume_button_emits_pause_datetime_when_not_paused(
     window._on_pause_resume_clicked()
 
     assert emitted == [target]
+
+
+def test_start_work_click_emits_seconds_when_duration_selected(
+    qcoreapp: Any, monkeypatch: Any, settings: AppSettings
+) -> None:
+    window = SettingsWindow(settings)
+    emitted: list[int] = []
+    window.startWorkRequested.connect(emitted.append)
+    monkeypatch.setattr(window, "_prompt_duration", lambda *_: 25)
+
+    window._on_start_work_clicked()
+
+    assert emitted == [25]
+
+
+def test_start_break_click_emits_seconds_when_duration_selected(
+    qcoreapp: Any, monkeypatch: Any, settings: AppSettings
+) -> None:
+    window = SettingsWindow(settings)
+    emitted: list[int] = []
+    window.startBreakRequested.connect(emitted.append)
+    monkeypatch.setattr(window, "_prompt_duration", lambda *_: 8)
+
+    window._on_start_break_clicked()
+
+    assert emitted == [8]
+
+
+def test_start_buttons_do_not_emit_when_duration_dialog_canceled(
+    qcoreapp: Any, monkeypatch: Any, settings: AppSettings
+) -> None:
+    window = SettingsWindow(settings)
+    work_emitted: list[int] = []
+    break_emitted: list[int] = []
+    window.startWorkRequested.connect(work_emitted.append)
+    window.startBreakRequested.connect(break_emitted.append)
+    monkeypatch.setattr(window, "_prompt_duration", lambda *_: None)
+
+    window._on_start_work_clicked()
+    window._on_start_break_clicked()
+
+    assert work_emitted == []
+    assert break_emitted == []
