@@ -111,7 +111,7 @@ class TrayController(QtCore.QObject):
         self, reason: QtWidgets.QSystemTrayIcon.ActivationReason
     ) -> None:
         if reason == QtWidgets.QSystemTrayIcon.ActivationReason.Trigger:
-            self._menu.popup(QtGui.QCursor.pos())
+            self.openAppRequested.emit()
 
 
 class PauseUntilDialog(QtWidgets.QDialog):

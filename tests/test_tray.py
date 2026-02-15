@@ -191,20 +191,20 @@ def test_pause_action_emits_datetime_when_working(
     assert emitted == [target]
 
 
-def test_tray_activation_opens_menu(
+def test_tray_activation_requests_open_app(
     qcoreapp: QtCore.QCoreApplication, monkeypatch: Any
 ) -> None:
     monkeypatch.setattr(tray_module.QtWidgets, "QSystemTrayIcon", DummyTray)
     monkeypatch.setattr(tray_module.QtWidgets, "QMenu", DummyMenu)
-    monkeypatch.setattr(tray_module.QtGui.QCursor, "pos", lambda: "cursor-pos")
 
     sp_manager = DummySessionPhaseManager(SessionPhase.WORK, remaining_ms=0)
     tray = TrayController(
         app=cast(Any, SimpleNamespace()),
         session_phase_manager=cast(Any, sp_manager),
     )
+    opened: list[bool] = []
+    tray.openAppRequested.connect(lambda: opened.append(True))
 
     tray._on_tray_activated(DummyTray.ActivationReason.Trigger)
 
-    menu = cast(DummyMenu, tray._menu)
-    assert menu.popup_called_with == "cursor-pos"
+    assert opened == [True]
