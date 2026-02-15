@@ -56,6 +56,7 @@ class DummySessionPhaseManager:
 class DummyTrayController:
     def __init__(self, *_: Any, **__: Any) -> None:
         self.openAppRequested = DummySignal()
+        self.newNoteNowRequested = DummySignal()
         self.pauseUntilRequested = DummySignal()
         self.resumeRequested = DummySignal()
         self.quitRequested = DummySignal()
@@ -162,6 +163,7 @@ def test_pomodoro_app_wires_controllers(
     assert tray_controller.show_called is True
     assert app._on_phase_changed in phase_manager.phaseChanged._callbacks
     assert app._show_break_window in phase_manager.workEnded._callbacks
+    assert app._show_break_window in tray_controller.newNoteNowRequested._callbacks
     assert phase_manager.pause_until in tray_controller.pauseUntilRequested._callbacks
     assert phase_manager.resume in tray_controller.resumeRequested._callbacks
     app._open_settings_window()
@@ -185,6 +187,24 @@ def test_show_break_window_reuses_prompt(
     app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
 
     app._show_break_window()
+    prompt = app._break_screen
+    assert prompt is not None
+    dummy_prompt = cast(DummyPrompt, prompt)
+    assert dummy_prompt.show_called == 1
+
+
+def test_new_note_now_from_tray_opens_break_window(
+    monkeypatch: Any, settings: AppSettings
+) -> None:
+    monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
+    monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
+    monkeypatch.setattr(app_module, "BreakScreen", DummyPrompt)
+
+    app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
+    tray_controller = cast(DummyTrayController, app._tray_controller)
+
+    tray_controller.newNoteNowRequested.emit()
+
     prompt = app._break_screen
     assert prompt is not None
     dummy_prompt = cast(DummyPrompt, prompt)

@@ -56,6 +56,7 @@ class PomodoroApp(QtCore.QObject):
         self._tray_controller.resumeRequested.connect(self._sp_manager.resume)
         self._tray_controller.quitRequested.connect(self._app.quit)
         self._tray_controller.openAppRequested.connect(self._open_settings_window)
+        self._tray_controller.newNoteNowRequested.connect(self._show_break_window)
 
         self._sp_manager.start()
         self._tray_controller.show()

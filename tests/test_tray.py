@@ -208,3 +208,22 @@ def test_tray_activation_requests_open_app(
     tray._on_tray_activated(DummyTray.ActivationReason.Trigger)
 
     assert opened == [True]
+
+
+def test_new_note_now_action_emits_request(
+    qcoreapp: QtCore.QCoreApplication, monkeypatch: Any
+) -> None:
+    monkeypatch.setattr(tray_module.QtWidgets, "QSystemTrayIcon", DummyTray)
+    monkeypatch.setattr(tray_module.QtWidgets, "QMenu", DummyMenu)
+
+    sp_manager = DummySessionPhaseManager(SessionPhase.WORK, remaining_ms=0)
+    tray = TrayController(
+        app=cast(Any, SimpleNamespace()),
+        session_phase_manager=cast(Any, sp_manager),
+    )
+    emitted: list[bool] = []
+    tray.newNoteNowRequested.connect(lambda: emitted.append(True))
+
+    tray._action_new_note_now.triggered.emit()
+
+    assert emitted == [True]
