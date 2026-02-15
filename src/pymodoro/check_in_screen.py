@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from pymodoro.break_screen_widgets import FocusRatingWidget, PromptCard
+from pymodoro.check_in_screen_widgets import FocusRatingWidget, PromptCard
 
 STYLESHEET = """
 QDialog {
@@ -41,7 +41,7 @@ SUBMIT_SHORTCUTS = [
 ]
 
 
-class BreakScreen(QtWidgets.QDialog):
+class CheckInScreen(QtWidgets.QDialog):
     submitted = QtCore.Signal(str, object)
     snoozed = QtCore.Signal()
 

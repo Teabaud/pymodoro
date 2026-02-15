@@ -4,7 +4,7 @@ import random
 
 from loguru import logger
 
-from pymodoro.break_screen import BreakScreen
+from pymodoro.check_in_screen import CheckInScreen
 from pymodoro.session import SessionPhase, SessionPhaseManager
 from pymodoro.settings import AppSettings
 from pymodoro.settings_window import SettingsWindow
@@ -44,19 +44,19 @@ class PomodoroApp(QtCore.QObject):
         self._app = app or _get_qt_app()
         self._settings = settings
 
-        self._break_screen: BreakScreen | None = None
+        self._check_in_screen: CheckInScreen | None = None
         self._settings_window: SettingsWindow | None = None
 
         self._sp_manager = SessionPhaseManager(settings=settings)
         self._tray_controller = TrayController(self._app, self._sp_manager)
 
         self._sp_manager.phaseChanged.connect(self._on_phase_changed)
-        self._sp_manager.workEnded.connect(self._show_break_window)
+        self._sp_manager.workEnded.connect(self._show_check_in_window)
         self._tray_controller.pauseUntilRequested.connect(self._sp_manager.pause_until)
         self._tray_controller.resumeRequested.connect(self._sp_manager.resume)
         self._tray_controller.quitRequested.connect(self._app.quit)
         self._tray_controller.openAppRequested.connect(self._open_settings_window)
-        self._tray_controller.newNoteNowRequested.connect(self._show_break_window)
+        self._tray_controller.checkInRequested.connect(self._show_check_in_window)
 
         self._sp_manager.start()
         self._tray_controller.show()
@@ -92,29 +92,29 @@ class PomodoroApp(QtCore.QObject):
         if self._settings_window and self._settings_window.isVisible():
             self._settings_window.set_paused(current_phase == SessionPhase.PAUSE)
 
-    def _show_break_window(self) -> None:
-        if self._break_screen and self._break_screen.isVisible():
+    def _show_check_in_window(self) -> None:
+        if self._check_in_screen and self._check_in_screen.isVisible():
             return
         prompt_message = self._select_work_end_prompt()
-        if self._break_screen is None:
-            self._break_screen = BreakScreen(prompt_message=prompt_message)
-            self._break_screen.submitted.connect(self._on_break_screen_submit)
-            self._break_screen.snoozed.connect(self._on_break_snooze)
+        if self._check_in_screen is None:
+            self._check_in_screen = CheckInScreen(prompt_message=prompt_message)
+            self._check_in_screen.submitted.connect(self._on_check_in_screen_submit)
+            self._check_in_screen.snoozed.connect(self._on_check_in_snooze)
         else:
-            self._break_screen.set_prompt_message(prompt_message)
-        self._break_screen.show()
+            self._check_in_screen.set_prompt_message(prompt_message)
+        self._check_in_screen.show()
 
-    def _on_break_screen_submit(self, text: str, focus_rating: int | None) -> None:
+    def _on_check_in_screen_submit(self, text: str, focus_rating: int | None) -> None:
         logger.info("Note: {} | focus_rating: {}", text, focus_rating)
-        self._close_break_window()
+        self._close_check_in_window()
 
-    def _on_break_snooze(self) -> None:
-        self._close_break_window()
+    def _on_check_in_snooze(self) -> None:
+        self._close_check_in_window()
         self._sp_manager.snooze_break()
 
-    def _close_break_window(self) -> None:
-        if self._break_screen is not None:
-            self._break_screen.close()
+    def _close_check_in_window(self) -> None:
+        if self._check_in_screen is not None:
+            self._check_in_screen.close()
 
     def _select_work_end_prompt(self) -> str:
         return random.choice(self._settings.messages.work_end_prompts)

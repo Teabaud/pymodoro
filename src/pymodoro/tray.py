@@ -15,7 +15,7 @@ TRAY_ICON_LABELS = {
 
 class TrayController(QtCore.QObject):
     openAppRequested = QtCore.Signal()
-    newNoteNowRequested = QtCore.Signal()
+    checkInRequested = QtCore.Signal()
     pauseUntilRequested = QtCore.Signal(object)
     resumeRequested = QtCore.Signal()
     quitRequested = QtCore.Signal()
@@ -33,8 +33,8 @@ class TrayController(QtCore.QObject):
         self._menu = QtWidgets.QMenu()
         self._action_open_app = self._menu.addAction("Open App")
         self._action_open_app.triggered.connect(self.openAppRequested.emit)
-        self._action_new_note_now = self._menu.addAction("Add new note")
-        self._action_new_note_now.triggered.connect(self.newNoteNowRequested.emit)
+        self._action_check_in = self._menu.addAction("Check in")
+        self._action_check_in.triggered.connect(self.checkInRequested.emit)
         self._action_pause = self._menu.addAction("Pause until...")
         self._action_pause.triggered.connect(self._on_pause_action)
         self._action_quit = self._menu.addAction("Quit")

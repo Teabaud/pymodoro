@@ -210,7 +210,7 @@ def test_tray_activation_requests_open_app(
     assert opened == [True]
 
 
-def test_new_note_now_action_emits_request(
+def test_check_in_action_emits_request(
     qcoreapp: QtCore.QCoreApplication, monkeypatch: Any
 ) -> None:
     monkeypatch.setattr(tray_module.QtWidgets, "QSystemTrayIcon", DummyTray)
@@ -222,8 +222,9 @@ def test_new_note_now_action_emits_request(
         session_phase_manager=cast(Any, sp_manager),
     )
     emitted: list[bool] = []
-    tray.newNoteNowRequested.connect(lambda: emitted.append(True))
+    tray.checkInRequested.connect(lambda: emitted.append(True))
+    assert tray._action_check_in.text == "Check in"
 
-    tray._action_new_note_now.triggered.emit()
+    tray._action_check_in.triggered.emit()
 
     assert emitted == [True]
