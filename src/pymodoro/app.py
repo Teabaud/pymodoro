@@ -5,7 +5,7 @@ import random
 from loguru import logger
 
 from pymodoro.break_screen import BreakScreen
-from pymodoro.session import SessionPhaseManager
+from pymodoro.session import SessionPhase, SessionPhaseManager
 from pymodoro.settings import AppSettings
 from pymodoro.settings_window import SettingsWindow
 from pymodoro.tray import TrayController
@@ -44,10 +44,13 @@ class PomodoroApp(QtCore.QObject):
         self._app = app or _get_qt_app()
         self._settings = settings
 
+        self._break_screen: BreakScreen | None = None
+        self._settings_window: SettingsWindow | None = None
+
         self._sp_manager = SessionPhaseManager(settings=settings)
         self._tray_controller = TrayController(self._app, self._sp_manager)
 
-        self._sp_manager.phaseChanged.connect(self._tray_controller.refresh)
+        self._sp_manager.phaseChanged.connect(self._on_phase_changed)
         self._sp_manager.workEnded.connect(self._show_break_window)
         self._tray_controller.pauseUntilRequested.connect(self._sp_manager.pause_until)
         self._tray_controller.resumeRequested.connect(self._sp_manager.resume)
@@ -57,22 +60,34 @@ class PomodoroApp(QtCore.QObject):
         self._sp_manager.start()
         self._tray_controller.show()
 
-        self._break_screen: BreakScreen | None = None
-        self._settings_window: SettingsWindow | None = None
-
         self.launch = self._app.exec
 
     def _open_settings_window(self) -> None:
-        if self._settings_window is not None and self._settings_window.isVisible():
+        if self._settings_window and self._settings_window.isVisible():
+            self._settings_window.set_paused(
+                self._sp_manager.session_phase == SessionPhase.PAUSE
+            )
             self._settings_window.raise_()
             self._settings_window.activateWindow()
             return
         self._settings_window = SettingsWindow(self._settings)
         self._settings_window.settingsSaved.connect(self._on_settings_saved)
+        self._settings_window.pauseUntilRequested.connect(self._sp_manager.pause_until)
+        self._settings_window.resumeRequested.connect(self._sp_manager.resume)
+        self._settings_window.set_paused(
+            self._sp_manager.session_phase == SessionPhase.PAUSE
+        )
         self._settings_window.show()
 
     def _on_settings_saved(self) -> None:
         self._tray_controller.refresh()
+
+    def _on_phase_changed(
+        self, _: SessionPhase, current_phase: SessionPhase
+    ) -> None:
+        self._tray_controller.refresh()
+        if self._settings_window and self._settings_window.isVisible():
+            self._settings_window.set_paused(current_phase == SessionPhase.PAUSE)
 
     def _show_break_window(self) -> None:
         if self._break_screen and self._break_screen.isVisible():

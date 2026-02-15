@@ -6,6 +6,7 @@ from typing import Any, Callable, cast
 import pytest
 
 import pymodoro.app as app_module
+from pymodoro.session import SessionPhase
 from pymodoro.settings import AppSettings, MessagesSettings, TimersSettings
 
 
@@ -29,6 +30,7 @@ class DummySessionPhaseManager:
         self.pause_until_called: list[Any] = []
         self.resume_called = False
         self.snooze_break_called = False
+        self.session_phase = SessionPhase.WORK
 
     def start(self) -> None:
         self.start_called = True
@@ -100,8 +102,11 @@ class DummySettingsWindow:
     def __init__(self, settings: AppSettings) -> None:
         self.settings = settings
         self.settingsSaved = DummySignal()
+        self.pauseUntilRequested = DummySignal()
+        self.resumeRequested = DummySignal()
         self.show_called = False
         self._visible = False
+        self.paused_states: list[bool] = []
 
     def isVisible(self) -> bool:
         return self._visible
@@ -115,6 +120,9 @@ class DummySettingsWindow:
     def show(self) -> None:
         self.show_called = True
         self._visible = True
+
+    def set_paused(self, paused: bool) -> None:
+        self.paused_states.append(paused)
 
 
 @pytest.fixture
@@ -132,6 +140,7 @@ def test_pomodoro_app_wires_controllers(
     monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
     monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
     monkeypatch.setattr(app_module, "BreakScreen", DummyPrompt)
+    monkeypatch.setattr(app_module, "SettingsWindow", DummySettingsWindow)
 
     dummy_app = DummyApp()
     app = app_module.PomodoroApp(settings, app=cast(Any, dummy_app))
@@ -141,10 +150,14 @@ def test_pomodoro_app_wires_controllers(
 
     assert phase_manager.start_called is True
     assert tray_controller.show_called is True
-    assert tray_controller.refresh in phase_manager.phaseChanged._callbacks
+    assert app._on_phase_changed in phase_manager.phaseChanged._callbacks
     assert app._show_break_window in phase_manager.workEnded._callbacks
     assert phase_manager.pause_until in tray_controller.pauseUntilRequested._callbacks
     assert phase_manager.resume in tray_controller.resumeRequested._callbacks
+    app._open_settings_window()
+    settings_window = cast(DummySettingsWindow, app._settings_window)
+    assert phase_manager.pause_until in settings_window.pauseUntilRequested._callbacks
+    assert phase_manager.resume in settings_window.resumeRequested._callbacks
     assert dummy_app.quit in tray_controller.quitRequested._callbacks
     app.launch()
     assert dummy_app.exec_called is True
@@ -252,3 +265,21 @@ def test_settings_saved_refreshes_tray(monkeypatch: Any, settings: AppSettings) 
 
     assert settings_window.show_called is True
     assert tray_controller.refresh_called is True
+
+
+def test_phase_change_updates_open_settings_paused_state(
+    monkeypatch: Any, settings: AppSettings
+) -> None:
+    monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
+    monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
+    monkeypatch.setattr(app_module, "BreakScreen", DummyPrompt)
+    monkeypatch.setattr(app_module, "SettingsWindow", DummySettingsWindow)
+
+    app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
+    app._open_settings_window()
+    settings_window = cast(DummySettingsWindow, app._settings_window)
+
+    app._sp_manager.phaseChanged.emit(SessionPhase.WORK, SessionPhase.PAUSE)
+    app._sp_manager.phaseChanged.emit(SessionPhase.PAUSE, SessionPhase.WORK)
+
+    assert settings_window.paused_states == [False, True, False]
