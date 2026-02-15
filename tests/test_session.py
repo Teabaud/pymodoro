@@ -6,7 +6,7 @@ from typing import Any
 from PySide6.QtCore import QDateTime
 
 from pymodoro.session import SessionPhase, SessionPhaseManager
-from pymodoro.settings import AppSettings, MessagesSettings, TimersSettings
+from pymodoro.settings import AppSettings, CheckInSettings, TimersSettings
 
 
 def _make_settings(
@@ -20,7 +20,7 @@ def _make_settings(
             break_duration=break_duration,
             snooze_duration=snooze_duration,
         ),
-        messages=MessagesSettings(work_end_prompts=["Prompt"]),
+        check_in=CheckInSettings(prompts=["Prompt"]),
         settings_path=Path("/tmp/settings.yaml"),
     )
 

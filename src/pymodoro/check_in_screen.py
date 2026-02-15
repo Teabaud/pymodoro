@@ -47,7 +47,7 @@ class CheckInScreen(QtWidgets.QDialog):
 
     def __init__(
         self,
-        prompt_message: str,
+        check_in_prompt: str,
         parent: QtWidgets.QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -60,7 +60,7 @@ class CheckInScreen(QtWidgets.QDialog):
         self.setWindowModality(QtCore.Qt.WindowModality.WindowModal)
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_ShowWithoutActivating, False)
 
-        self._prompt_card = PromptCard(prompt_message, self)
+        self._prompt_card = PromptCard(check_in_prompt, self)
         self._focus_rating_widget = FocusRatingWidget(self)
         self._submit_button = QtWidgets.QPushButton("Submit", self)
         self._snooze_button = QtWidgets.QPushButton("Snooze", self)
@@ -71,7 +71,7 @@ class CheckInScreen(QtWidgets.QDialog):
         self.setLayout(self._build_layout())
         self.setStyleSheet(STYLESHEET)
 
-        self.set_prompt_message = self._prompt_card.set_prompt_message
+        self.set_check_in_prompt = self._prompt_card.set_check_in_prompt
 
     def _install_submit_shortcuts(self) -> None:
         for shortcut in SUBMIT_SHORTCUTS:

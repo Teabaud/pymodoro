@@ -95,17 +95,17 @@ class PomodoroApp(QtCore.QObject):
     def _show_check_in_window(self) -> None:
         if self._check_in_screen and self._check_in_screen.isVisible():
             return
-        prompt_message = self._select_work_end_prompt()
+        check_in_prompt = self._select_check_in_prompt()
         if self._check_in_screen is None:
-            self._check_in_screen = CheckInScreen(prompt_message=prompt_message)
+            self._check_in_screen = CheckInScreen(check_in_prompt=check_in_prompt)
             self._check_in_screen.submitted.connect(self._on_check_in_screen_submit)
             self._check_in_screen.snoozed.connect(self._on_check_in_snooze)
         else:
-            self._check_in_screen.set_prompt_message(prompt_message)
+            self._check_in_screen.set_check_in_prompt(check_in_prompt)
         self._check_in_screen.show()
 
-    def _on_check_in_screen_submit(self, text: str, focus_rating: int | None) -> None:
-        logger.info("Note: {} | focus_rating: {}", text, focus_rating)
+    def _on_check_in_screen_submit(self, answer: str, focus_rating: int | None) -> None:
+        logger.info("Answer: {} | focus_rating: {}", answer, focus_rating)
         self._close_check_in_window()
 
     def _on_check_in_snooze(self) -> None:
@@ -116,5 +116,5 @@ class PomodoroApp(QtCore.QObject):
         if self._check_in_screen is not None:
             self._check_in_screen.close()
 
-    def _select_work_end_prompt(self) -> str:
-        return random.choice(self._settings.messages.work_end_prompts)
+    def _select_check_in_prompt(self) -> str:
+        return random.choice(self._settings.check_in.prompts)

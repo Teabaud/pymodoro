@@ -20,22 +20,22 @@ class PromptCard(QWidget):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self._message = QLabel(prompt, self)
-        self._message.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self._message.setWordWrap(True)
+        self._check_in_prompt = QLabel(prompt, self)
+        self._check_in_prompt.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self._check_in_prompt.setWordWrap(True)
 
         self._input = QPlainTextEdit(self)
         self._input.setPlaceholderText("Type your answer here...")
         self._input.setVisible(True)
 
         layout = QVBoxLayout(self)
-        layout.addWidget(self._message)
+        layout.addWidget(self._check_in_prompt)
         layout.addSpacing(24)
         layout.addWidget(self._input)
         self.setLayout(layout)
 
-    def set_prompt_message(self, text: str) -> None:
-        self._message.setText(text)
+    def set_check_in_prompt(self, text: str) -> None:
+        self._check_in_prompt.setText(text)
 
     def answer(self) -> str:
         return self._input.toPlainText().strip()

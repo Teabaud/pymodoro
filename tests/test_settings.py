@@ -29,7 +29,7 @@ def test_load_settings_uses_existing_file(tmp_path: Path) -> None:
     settings = load_settings(settings_path)
 
     assert settings_path.read_text(encoding="utf-8") == DEFAULT_SETTINGS_YAML
-    assert settings.messages.work_end_prompts
+    assert settings.check_in.prompts
 
 
 def test_load_settings_invalid_yaml_raises(tmp_path: Path) -> None:

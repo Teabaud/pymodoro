@@ -7,7 +7,7 @@ import pytest
 from PySide6 import QtCore, QtGui
 from PySide6.QtWidgets import QMessageBox, QSizePolicy
 
-from pymodoro.settings import AppSettings, MessagesSettings, TimersSettings
+from pymodoro.settings import AppSettings, CheckInSettings, TimersSettings
 from pymodoro.settings_window import SettingsWindow
 
 
@@ -15,7 +15,7 @@ from pymodoro.settings_window import SettingsWindow
 def settings(tmp_path: Path) -> AppSettings:
     return AppSettings(
         timers=TimersSettings(work_duration=10, break_duration=5, snooze_duration=3),
-        messages=MessagesSettings(work_end_prompts=["One", "Two"]),
+        check_in=CheckInSettings(prompts=["One", "Two"]),
         settings_path=tmp_path / "settings.yaml",
     )
 
@@ -24,36 +24,46 @@ def test_add_prompt_marks_dialog_dirty(qcoreapp: Any, settings: AppSettings) -> 
     window = SettingsWindow(settings)
 
     assert window._dirty is False
-    window._messages_group.prompts_editor.add_prompt("Three")
+    window._check_in_prompts_section_widget.prompts_editor.add_prompt("Three")
 
     assert window._dirty is True
-    assert window._messages_group.prompts_editor.get_prompts() == ["One", "Two", "Three"]
+    assert window._check_in_prompts_section_widget.prompts_editor.get_prompts() == [
+        "One",
+        "Two",
+        "Three",
+    ]
 
 
 def test_prompts_editor_cannot_delete_last_prompt(
     qcoreapp: Any, settings: AppSettings
 ) -> None:
     window = SettingsWindow(settings)
-    window._messages_group.prompts_editor.set_prompts(["Only one"])
-    first_row = window._messages_group.prompts_editor._row_widget(
-        window._messages_group.prompts_editor._list.item(0)
+    window._check_in_prompts_section_widget.prompts_editor.set_prompts(["Only one"])
+    first_row = window._check_in_prompts_section_widget.prompts_editor._row_widget(
+        window._check_in_prompts_section_widget.prompts_editor._list.item(0)
     )
     assert first_row is not None
 
-    window._messages_group.prompts_editor._remove_prompt_row(first_row)
+    window._check_in_prompts_section_widget.prompts_editor._remove_prompt_row(first_row)
 
-    assert window._messages_group.prompts_editor.get_prompts() == ["Only one"]
+    assert (
+        window._check_in_prompts_section_widget.prompts_editor.get_prompts() == ["Only one"]
+    )
 
 
 def test_prompts_editor_move_prompt_reorders_items(
     qcoreapp: Any, settings: AppSettings
 ) -> None:
     window = SettingsWindow(settings)
-    window._messages_group.prompts_editor.set_prompts(["A", "B", "C"])
+    window._check_in_prompts_section_widget.prompts_editor.set_prompts(["A", "B", "C"])
 
-    window._messages_group.prompts_editor.move_prompt(2, 0)
+    window._check_in_prompts_section_widget.prompts_editor.move_prompt(2, 0)
 
-    assert window._messages_group.prompts_editor.get_prompts() == ["C", "A", "B"]
+    assert window._check_in_prompts_section_widget.prompts_editor.get_prompts() == [
+        "C",
+        "A",
+        "B",
+    ]
 
 
 def test_only_one_empty_prompt_allowed_and_add_disabled(
@@ -61,16 +71,16 @@ def test_only_one_empty_prompt_allowed_and_add_disabled(
 ) -> None:
     window = SettingsWindow(settings)
 
-    assert window._messages_group.add_prompt_button.isEnabled() is True
+    assert window._check_in_prompts_section_widget.add_prompt_button.isEnabled() is True
 
-    window._messages_group.prompts_editor.add_prompt("")
-    prompts_after_first_add = window._messages_group.prompts_editor.get_prompts()
+    window._check_in_prompts_section_widget.prompts_editor.add_prompt("")
+    prompts_after_first_add = window._check_in_prompts_section_widget.prompts_editor.get_prompts()
 
     assert prompts_after_first_add.count("") == 1
-    assert window._messages_group.add_prompt_button.isEnabled() is False
+    assert window._check_in_prompts_section_widget.add_prompt_button.isEnabled() is False
 
-    window._messages_group.prompts_editor.add_prompt("")
-    prompts_after_second_add = window._messages_group.prompts_editor.get_prompts()
+    window._check_in_prompts_section_widget.prompts_editor.add_prompt("")
+    prompts_after_second_add = window._check_in_prompts_section_widget.prompts_editor.get_prompts()
 
     assert prompts_after_second_add == prompts_after_first_add
     assert prompts_after_second_add.count("") == 1
@@ -80,45 +90,45 @@ def test_add_reenabled_when_empty_prompt_gets_content(
     qcoreapp: Any, settings: AppSettings
 ) -> None:
     window = SettingsWindow(settings)
-    window._messages_group.prompts_editor.set_prompts(["One", ""])
+    window._check_in_prompts_section_widget.prompts_editor.set_prompts(["One", ""])
 
-    assert window._messages_group.add_prompt_button.isEnabled() is False
+    assert window._check_in_prompts_section_widget.add_prompt_button.isEnabled() is False
 
-    empty_row = window._messages_group.prompts_editor._row_widget(
-        window._messages_group.prompts_editor._list.item(1)
+    empty_row = window._check_in_prompts_section_widget.prompts_editor._row_widget(
+        window._check_in_prompts_section_widget.prompts_editor._list.item(1)
     )
     assert empty_row is not None
     empty_row._line_edit.setText("Now filled")
 
-    assert window._messages_group.add_prompt_button.isEnabled() is True
+    assert window._check_in_prompts_section_widget.add_prompt_button.isEnabled() is True
 
 
 def test_empty_prompt_auto_removed_on_blur_and_add_reenabled(
     qcoreapp: Any, settings: AppSettings
 ) -> None:
     window = SettingsWindow(settings)
-    window._messages_group.prompts_editor.set_prompts(["One", ""])
+    window._check_in_prompts_section_widget.prompts_editor.set_prompts(["One", ""])
 
-    assert window._messages_group.add_prompt_button.isEnabled() is False
+    assert window._check_in_prompts_section_widget.add_prompt_button.isEnabled() is False
 
-    empty_row = window._messages_group.prompts_editor._row_widget(
-        window._messages_group.prompts_editor._list.item(1)
+    empty_row = window._check_in_prompts_section_widget.prompts_editor._row_widget(
+        window._check_in_prompts_section_widget.prompts_editor._list.item(1)
     )
     assert empty_row is not None
     empty_row._line_edit.editingFinished.emit()
 
-    assert window._messages_group.prompts_editor.get_prompts() == ["One"]
-    assert window._messages_group.add_prompt_button.isEnabled() is True
+    assert window._check_in_prompts_section_widget.prompts_editor.get_prompts() == ["One"]
+    assert window._check_in_prompts_section_widget.add_prompt_button.isEnabled() is True
 
 
 def test_empty_prompt_removed_on_focus_out_event(
     qcoreapp: Any, settings: AppSettings
 ) -> None:
     window = SettingsWindow(settings)
-    window._messages_group.prompts_editor.set_prompts(["One", ""])
+    window._check_in_prompts_section_widget.prompts_editor.set_prompts(["One", ""])
 
-    empty_row = window._messages_group.prompts_editor._row_widget(
-        window._messages_group.prompts_editor._list.item(1)
+    empty_row = window._check_in_prompts_section_widget.prompts_editor._row_widget(
+        window._check_in_prompts_section_widget.prompts_editor._list.item(1)
     )
     assert empty_row is not None
 
@@ -126,8 +136,8 @@ def test_empty_prompt_removed_on_focus_out_event(
     qcoreapp.sendEvent(empty_row._line_edit, focus_out)
     qcoreapp.processEvents()
 
-    assert window._messages_group.prompts_editor.get_prompts() == ["One"]
-    assert window._messages_group.add_prompt_button.isEnabled() is True
+    assert window._check_in_prompts_section_widget.prompts_editor.get_prompts() == ["One"]
+    assert window._check_in_prompts_section_widget.add_prompt_button.isEnabled() is True
 
 
 def test_save_updates_settings_and_emits_signal(
@@ -143,14 +153,14 @@ def test_save_updates_settings_and_emits_signal(
     )
 
     window._timers_group.work_duration.setValue(42)
-    window._messages_group.prompts_editor.set_prompts(["N1", "N2"])
+    window._check_in_prompts_section_widget.prompts_editor.set_prompts(["N1", "N2"])
     window._mark_dirty()
 
     result = window._try_save()
 
     assert result is True
     assert settings.timers.work_duration == 42
-    assert settings.messages.work_end_prompts == ["N1", "N2"]
+    assert settings.check_in.prompts == ["N1", "N2"]
     assert write_calls == [settings]
     assert saved == [True]
     assert window._dirty is False
@@ -185,7 +195,7 @@ def test_add_button_full_width_and_compact_duration_inputs(
     window = SettingsWindow(settings)
 
     assert (
-        window._messages_group.add_prompt_button.sizePolicy().horizontalPolicy()
+        window._check_in_prompts_section_widget.add_prompt_button.sizePolicy().horizontalPolicy()
         == QSizePolicy.Policy.Expanding
     )
     assert window._timers_group.work_duration.maximumWidth() == 120

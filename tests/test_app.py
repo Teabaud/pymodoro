@@ -7,7 +7,7 @@ import pytest
 
 import pymodoro.app as app_module
 from pymodoro.session import SessionPhase
-from pymodoro.settings import AppSettings, MessagesSettings, TimersSettings
+from pymodoro.settings import AppSettings, CheckInSettings, TimersSettings
 
 
 class DummySignal:
@@ -77,7 +77,7 @@ class DummyPrompt:
         self.visible = False
         self.show_called = 0
         self.closed = False
-        self.prompt_message: str | None = None
+        self.check_in_prompt: str | None = None
 
     def isVisible(self) -> bool:
         return self.visible
@@ -90,8 +90,8 @@ class DummyPrompt:
         self.visible = False
         self.closed = True
 
-    def set_prompt_message(self, prompt_message: str) -> None:
-        self.prompt_message = prompt_message
+    def set_check_in_prompt(self, check_in_prompt: str) -> None:
+        self.check_in_prompt = check_in_prompt
 
 
 class DummyApp:
@@ -139,7 +139,7 @@ class DummySettingsWindow:
 @pytest.fixture
 def settings(tmp_path: Any) -> AppSettings:
     return AppSettings(
-        messages=MessagesSettings(work_end_prompts=["Break time?"]),
+        check_in=CheckInSettings(prompts=["Break time?"]),
         timers=TimersSettings(work_duration=10, break_duration=5, snooze_duration=3),
         settings_path=tmp_path / "settings.yaml",
     )
@@ -267,7 +267,7 @@ def test_note_submit_closes_prompt(monkeypatch: Any, settings: AppSettings) -> N
     assert prompt.closed is True
 
 
-def test_work_end_prompt_selection_not_constant(
+def test_check_in_prompt_selection_not_constant(
     monkeypatch: Any, tmp_path: Any
 ) -> None:
     monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
@@ -277,13 +277,13 @@ def test_work_end_prompt_selection_not_constant(
 
     prompts = [f"Prompt {index}" for index in range(10)]
     settings = AppSettings(
-        messages=MessagesSettings(work_end_prompts=prompts),
+        check_in=CheckInSettings(prompts=prompts),
         timers=TimersSettings(work_duration=10, break_duration=5, snooze_duration=3),
         settings_path=tmp_path / "settings.yaml",
     )
     app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
 
-    selections = [app._select_work_end_prompt() for _ in range(10)]
+    selections = [app._select_check_in_prompt() for _ in range(10)]
 
     assert selections == [
         "Prompt 6",

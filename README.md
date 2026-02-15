@@ -1,10 +1,10 @@
 # Pymodoro
 
-A lightweight system-tray Pomodoro timer with fullscreen breaks and quick notes.
+A lightweight system-tray Pomodoro timer with fullscreen check-ins and quick notes.
 
 ## Features
 - System tray timer with live countdown
-- Fullscreen break prompt with note capture and snooze
+- Fullscreen check-in prompt with note capture and snooze
 - Pause until a specific time
 - YAML-based settings with sensible defaults
 
@@ -45,8 +45,11 @@ timers:
   break_duration: 300  # seconds (5 minutes)
   snooze_duration: 60  # seconds (1 minute)
 
-messages:
-  work_end_question: "How do you feel rigth now?"
+check_in:
+  prompts:
+    - "How present are you in what you do?"
+    - "What do you want to focus on next?"
+    - "What is your goal for the day?"
 ```
 
 Update the values to fit your workflow. Changes are picked up on the next launch.

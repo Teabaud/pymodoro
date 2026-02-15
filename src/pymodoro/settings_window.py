@@ -11,7 +11,7 @@ from pymodoro.settings import (
 )
 from pymodoro.settings_window_widgets import (
     DurationSelectionDialog,
-    MessagesSectionWidget,
+    CheckInPromptsSectionWidget,
     SessionSectionWidget,
     TimersSectionWidget,
 )
@@ -31,7 +31,7 @@ class SettingsDraft:
     work_duration: int
     break_duration: int
     snooze_duration: int
-    prompts: list[str]
+    check_in_prompts: list[str]
 
     @classmethod
     def from_settings(cls, settings: AppSettings) -> SettingsDraft:
@@ -39,7 +39,7 @@ class SettingsDraft:
             work_duration=settings.timers.work_duration,
             break_duration=settings.timers.break_duration,
             snooze_duration=settings.timers.snooze_duration,
-            prompts=list(settings.messages.work_end_prompts),
+            check_in_prompts=list(settings.check_in.prompts),
         )
 
 
@@ -71,13 +71,15 @@ class SettingsWindow(QDialog):
             break_duration=self._draft.break_duration,
             snooze_duration=self._draft.snooze_duration,
         )
-        self._messages_group = MessagesSectionWidget(prompts=self._draft.prompts)
+        self._check_in_prompts_section_widget: CheckInPromptsSectionWidget = CheckInPromptsSectionWidget(
+            check_in_prompts=self._draft.check_in_prompts
+        )
 
         self._session_group.pauseResumeClicked.connect(self._on_pause_resume_clicked)
         self._session_group.startWorkClicked.connect(self._on_start_work_clicked)
         self._session_group.startBreakClicked.connect(self._on_start_break_clicked)
         self._timers_group.changed.connect(self._mark_dirty)
-        self._messages_group.changed.connect(self._mark_dirty)
+        self._check_in_prompts_section_widget.changed.connect(self._mark_dirty)
 
         self._button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save
@@ -89,7 +91,7 @@ class SettingsWindow(QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(self._session_group)
         layout.addWidget(self._timers_group)
-        layout.addWidget(self._messages_group)
+        layout.addWidget(self._check_in_prompts_section_widget)
         layout.addWidget(self._button_box)
 
     def set_paused(self, paused: bool) -> None:
@@ -145,13 +147,15 @@ class SettingsWindow(QDialog):
     def _try_save(self) -> bool:
         try:
             timers = self._timers_group.to_timers_settings()
-            messages = self._messages_group.to_messages_settings()
+            check_in_prompts = (
+                self._check_in_prompts_section_widget.prompts_editor.get_prompts()
+            )
         except ValidationError as error:
             self._show_validation_error(error)
             return False
 
         self._settings.timers = timers
-        self._settings.messages = messages
+        self._settings.check_in.prompts = check_in_prompts
         save_settings(self._settings)
         self._draft = SettingsDraft.from_settings(self._settings)
         self._dirty = False

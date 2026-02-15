@@ -12,8 +12,8 @@ DEFAULT_SETTINGS_YAML = """timers:
   break_duration: 300  # seconds (5 minutes)
   snooze_duration: 60  # seconds (1 minute)
 
-messages:
-  work_end_prompts:
+check_in:
+  prompts:
     - "How present are you in what you do?"
     - "What do you want to focus on next?"
     - "What is your goal for the day?"
@@ -28,13 +28,13 @@ class TimersSettings(BaseModel):
     snooze_duration: PositiveInt
 
 
-class MessagesSettings(BaseModel):
-    work_end_prompts: list[str]
+class CheckInSettings(BaseModel):
+    prompts: list[str]
 
 
 class AppSettings(BaseModel):
     timers: TimersSettings
-    messages: MessagesSettings
+    check_in: CheckInSettings
     settings_path: Path
 
 

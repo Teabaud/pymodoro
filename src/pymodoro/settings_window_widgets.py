@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pymodoro.settings import MessagesSettings, TimersSettings
+from pymodoro.settings import TimersSettings
 
 # isort: split
 from PySide6 import QtCore
@@ -27,14 +27,14 @@ DELETE_CHAR = "\u00d7"
 DURATION_INPUT_MAX_WIDTH = 120
 
 
-class PromptRowWidget(QFrame):
+class CheckInPromptRowWidget(QFrame):
     textChanged = QtCore.Signal()
     deleteRequested = QtCore.Signal(object)
     blurRequested = QtCore.Signal(object)
 
     def __init__(
         self,
-        text: str,
+        check_in_prompt: str,
         can_delete: bool,
         parent: QWidget | None = None,
     ) -> None:
@@ -57,15 +57,15 @@ class PromptRowWidget(QFrame):
         drag_handle.setFixedWidth(18)
         layout.addWidget(drag_handle)
 
-        self._line_edit = QLineEdit(text)
-        self._line_edit.setPlaceholderText("Enter message...")
+        self._line_edit = QLineEdit(check_in_prompt)
+        self._line_edit.setPlaceholderText("Enter check-in prompt...")
         self._line_edit.textChanged.connect(lambda _: self.textChanged.emit())
         self._line_edit.installEventFilter(self)
         self._line_edit.editingFinished.connect(lambda: self.blurRequested.emit(self))
         layout.addWidget(self._line_edit, 1)
 
         self._delete_btn = QPushButton(DELETE_CHAR)
-        self._delete_btn.setToolTip("Delete message")
+        self._delete_btn.setToolTip("Delete check-in prompt")
         self._delete_btn.setFixedSize(28, 28)
         self._delete_btn.clicked.connect(lambda: self.deleteRequested.emit(self))
         layout.addWidget(self._delete_btn)
@@ -159,9 +159,9 @@ class PromptsEditor(QWidget):
     def can_add_prompt(self) -> bool:
         return not self._has_empty_prompt
 
-    def _append_prompt_row(self, text: str) -> QListWidgetItem:
+    def _append_prompt_row(self, check_in_prompt: str) -> QListWidgetItem:
         item = QListWidgetItem()
-        row = PromptRowWidget(text=text, can_delete=self._list.count() > 0)
+        row = CheckInPromptRowWidget(check_in_prompt=check_in_prompt, can_delete=self._list.count() > 0)
         row.deleteRequested.connect(self._remove_prompt_row)
         row.textChanged.connect(self._on_row_text_changed)
         row.blurRequested.connect(self._on_row_blur)
@@ -232,9 +232,9 @@ class PromptsEditor(QWidget):
             if row is not None:
                 row.set_can_delete(can_delete)
 
-    def _row_widget(self, item: QListWidgetItem) -> PromptRowWidget | None:
+    def _row_widget(self, item: QListWidgetItem) -> CheckInPromptRowWidget | None:
         widget = self._list.itemWidget(item)
-        if isinstance(widget, PromptRowWidget):
+        if isinstance(widget, CheckInPromptRowWidget):
             return widget
         return None
 
@@ -338,15 +338,15 @@ class TimersSectionWidget(QGroupBox):
     def on_duration_changed(self, _: int) -> None:
         self.changed.emit()
 
-class MessagesSectionWidget(QGroupBox):
+class CheckInPromptsSectionWidget(QGroupBox):
     changed = QtCore.Signal()
 
-    def __init__(self, prompts: list[str], parent: QWidget | None = None) -> None:
-        super().__init__("Messages", parent)
+    def __init__(self, check_in_prompts: list[str], parent: QWidget | None = None) -> None:
+        super().__init__("Check-in Prompts", parent)
         layout = QVBoxLayout(self)
 
         self.prompts_editor = PromptsEditor()
-        self.prompts_editor.set_prompts(prompts)
+        self.prompts_editor.set_prompts(check_in_prompts)
         self.prompts_editor.changed.connect(self.changed.emit)
 
         self.add_prompt_button = QPushButton("Add")
@@ -361,5 +361,5 @@ class MessagesSectionWidget(QGroupBox):
         layout.addWidget(self.prompts_editor)
         layout.addWidget(self.add_prompt_button)
 
-    def to_messages_settings(self) -> MessagesSettings:
-        return MessagesSettings(work_end_prompts=self.prompts_editor.get_prompts())
+    def to_check_in_prompts(self) -> list[str]:
+        return self.prompts_editor.get_prompts()
