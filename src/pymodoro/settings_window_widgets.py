@@ -161,7 +161,9 @@ class PromptsEditor(QWidget):
 
     def _append_prompt_row(self, check_in_prompt: str) -> QListWidgetItem:
         item = QListWidgetItem()
-        row = CheckInPromptRowWidget(check_in_prompt=check_in_prompt, can_delete=self._list.count() > 0)
+        row = CheckInPromptRowWidget(
+            check_in_prompt=check_in_prompt, can_delete=self._list.count() > 0
+        )
         row.deleteRequested.connect(self._remove_prompt_row)
         row.textChanged.connect(self._on_row_text_changed)
         row.blurRequested.connect(self._on_row_blur)
@@ -303,6 +305,7 @@ class DurationInputWidget(QSpinBox):
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.setMaximumWidth(DURATION_INPUT_MAX_WIDTH)
 
+
 class TimersSectionWidget(QGroupBox):
     changed = QtCore.Signal()
 
@@ -338,10 +341,13 @@ class TimersSectionWidget(QGroupBox):
     def on_duration_changed(self, _: int) -> None:
         self.changed.emit()
 
+
 class CheckInPromptsSectionWidget(QGroupBox):
     changed = QtCore.Signal()
 
-    def __init__(self, check_in_prompts: list[str], parent: QWidget | None = None) -> None:
+    def __init__(
+        self, check_in_prompts: list[str], parent: QWidget | None = None
+    ) -> None:
         super().__init__("Check-in Prompts", parent)
         layout = QVBoxLayout(self)
 
@@ -350,7 +356,9 @@ class CheckInPromptsSectionWidget(QGroupBox):
         self.prompts_editor.changed.connect(self.changed.emit)
 
         self.add_prompt_button = QPushButton("Add")
-        self.add_prompt_button.clicked.connect(lambda: self.prompts_editor.add_prompt(""))
+        self.add_prompt_button.clicked.connect(
+            lambda: self.prompts_editor.add_prompt("")
+        )
         self.add_prompt_button.setSizePolicy(
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Fixed,

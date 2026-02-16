@@ -170,8 +170,13 @@ def test_pomodoro_app_wires_controllers(
     settings_window = cast(DummySettingsWindow, app._settings_window)
     assert phase_manager.pause_until in settings_window.pauseUntilRequested._callbacks
     assert phase_manager.resume in settings_window.resumeRequested._callbacks
-    assert phase_manager.start_work_phase in settings_window.startWorkRequested._callbacks
-    assert phase_manager.start_break_phase in settings_window.startBreakRequested._callbacks
+    assert (
+        phase_manager.start_work_phase in settings_window.startWorkRequested._callbacks
+    )
+    assert (
+        phase_manager.start_break_phase
+        in settings_window.startBreakRequested._callbacks
+    )
     assert dummy_app.quit in tray_controller.quitRequested._callbacks
     app.launch()
     assert dummy_app.exec_called is True

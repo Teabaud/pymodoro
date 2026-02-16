@@ -10,8 +10,8 @@ from pymodoro.settings import (
     save_settings,
 )
 from pymodoro.settings_window_widgets import (
-    DurationSelectionDialog,
     CheckInPromptsSectionWidget,
+    DurationSelectionDialog,
     SessionSectionWidget,
     TimersSectionWidget,
 )
@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QVBoxLayout,
 )
+
 
 @dataclass
 class SettingsDraft:
@@ -71,8 +72,8 @@ class SettingsWindow(QDialog):
             break_duration=self._draft.break_duration,
             snooze_duration=self._draft.snooze_duration,
         )
-        self._check_in_prompts_section_widget: CheckInPromptsSectionWidget = CheckInPromptsSectionWidget(
-            check_in_prompts=self._draft.check_in_prompts
+        self._check_in_prompts_section_widget: CheckInPromptsSectionWidget = (
+            CheckInPromptsSectionWidget(check_in_prompts=self._draft.check_in_prompts)
         )
 
         self._session_group.pauseResumeClicked.connect(self._on_pause_resume_clicked)

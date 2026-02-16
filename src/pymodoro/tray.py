@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pymodoro.session import SessionPhase, SessionPhaseManager
-from pymodoro.time_utils import TimeFormatter
 
 # isort: split
 from PySide6 import QtCore, QtGui, QtWidgets
@@ -77,16 +76,16 @@ class TrayController(QtCore.QObject):
 
     def refresh(self) -> None:
         phase = self._session_phase_manager.session_phase
-        remaining_ms = self._session_phase_manager.remaining_ms()
         if phase == SessionPhase.PAUSE:
-            end_date_str = TimeFormatter.end_datetime_str(remaining_ms)
-            self._tray.setToolTip(f"Pause until {end_date_str}")
+            tooltip_str = f"Pause until {self._session_phase_manager.ends_at_str()}"
             self._action_pause.setText("Resume")
         else:
-            countdown_label = TimeFormatter.countdown_str(remaining_ms)
-            self._tray.setToolTip(f"{phase.value} {countdown_label}")
+            tooltip_str = (
+                f"{phase.value} - {self._session_phase_manager.time_left_str()}"
+            )
             self._action_pause.setText("Pause until...")
 
+        self._tray.setToolTip(tooltip_str)
         label = TRAY_ICON_LABELS.get(phase, "?")
         pixmap = self._render_icon(label)
         self._tray.setIcon(QtGui.QIcon(pixmap))

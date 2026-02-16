@@ -75,8 +75,12 @@ class PomodoroApp(QtCore.QObject):
         self._settings_window.settingsSaved.connect(self._on_settings_saved)
         self._settings_window.pauseUntilRequested.connect(self._sp_manager.pause_until)
         self._settings_window.resumeRequested.connect(self._sp_manager.resume)
-        self._settings_window.startWorkRequested.connect(self._sp_manager.start_work_phase)
-        self._settings_window.startBreakRequested.connect(self._sp_manager.start_break_phase)
+        self._settings_window.startWorkRequested.connect(
+            self._sp_manager.start_work_phase
+        )
+        self._settings_window.startBreakRequested.connect(
+            self._sp_manager.start_break_phase
+        )
         self._settings_window.set_paused(
             self._sp_manager.session_phase == SessionPhase.PAUSE
         )
@@ -85,9 +89,7 @@ class PomodoroApp(QtCore.QObject):
     def _on_settings_saved(self) -> None:
         self._tray_controller.refresh()
 
-    def _on_phase_changed(
-        self, _: SessionPhase, current_phase: SessionPhase
-    ) -> None:
+    def _on_phase_changed(self, _: SessionPhase, current_phase: SessionPhase) -> None:
         self._tray_controller.refresh()
         if self._settings_window and self._settings_window.isVisible():
             self._settings_window.set_paused(current_phase == SessionPhase.PAUSE)

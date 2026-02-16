@@ -77,6 +77,12 @@ class DummySessionPhaseManager:
     def remaining_ms(self) -> int:
         return self._remaining_ms
 
+    def ends_at_str(self) -> str:
+        return "12:00"
+
+    def time_left_str(self) -> str:
+        return QtCore.QTime(0, 0).addMSecs(self._remaining_ms).toString("hh:mm:ss")
+
 
 def test_refresh_updates_pause_tooltip_and_icon(
     qcoreapp: QtCore.QCoreApplication, monkeypatch: Any
@@ -123,7 +129,7 @@ def test_refresh_updates_work_tooltip_and_icon(
 
     assert tray._action_pause.text == "Pause until..."
     tray_icon = cast(DummyTray, tray._tray)
-    assert tray_icon.tooltip == "work 00:00:05"
+    assert tray_icon.tooltip == "Work - 00:00:05"
     assert tray_icon.icon == f"icon:pix:{TRAY_ICON_LABELS[SessionPhase.WORK]}"
 
 
@@ -147,7 +153,7 @@ def test_refresh_updates_break_tooltip_and_icon(
 
     assert tray._action_pause.text == "Pause until..."
     tray_icon = cast(DummyTray, tray._tray)
-    assert tray_icon.tooltip == "break 00:00:12"
+    assert tray_icon.tooltip == "Break - 00:00:12"
     assert tray_icon.icon == f"icon:pix:{TRAY_ICON_LABELS[SessionPhase.BREAK]}"
 
 
