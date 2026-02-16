@@ -229,7 +229,7 @@ def test_manager_time_left_str_uses_remaining_ms(monkeypatch: Any) -> None:
     sp_manager.start_work_phase(seconds=10)
     monkeypatch.setattr(sp_manager._timer, "remaining_ms", lambda: 5_000)
 
-    assert sp_manager.time_left_str() == "Work - 00:00:05"
+    assert sp_manager.time_left_str() == "00:00:05"
 
 
 def test_manager_ends_at_str_formats_today(monkeypatch: Any) -> None:
@@ -240,4 +240,4 @@ def test_manager_ends_at_str_formats_today(monkeypatch: Any) -> None:
     monkeypatch.setattr(QtCore.QDate, "currentDate", lambda: now.date())
     monkeypatch.setattr(sp_manager._timer, "ends_at", lambda: end_today)
 
-    assert sp_manager.ends_at_str() == f"{sp_manager.session_phase.value} until 10:30"
+    assert sp_manager.ends_at_str() == f"10:30"

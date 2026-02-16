@@ -171,17 +171,13 @@ class SessionPhaseManager(QtCore.QObject):
             return "no end datetime"
         phase_ends_today: bool = ends_at.date() == QtCore.QDate.currentDate()
         datetime_str: str = "HH:mm" if phase_ends_today else "yyyy-MM-dd HH:mm"
-        ends_at_str: str = ends_at.toString(datetime_str)
-        return f"{self._phase.value} until {ends_at_str}"
-
+        return ends_at.toString(datetime_str)
+        
     def time_left_str(self) -> str:
         remaining_ms = self.remaining_ms()
         if remaining_ms < 0:
             return "no end datetime"
-        time_left_str: str = (
-            QtCore.QTime(0, 0).addMSecs(max(0, remaining_ms)).toString("hh:mm:ss")
-        )
-        return f"{self._phase.value} - {time_left_str}"
+        return QtCore.QTime(0, 0).addMSecs(remaining_ms).toString("hh:mm:ss")
 
     def __str__(self) -> str:
         if self._phase == SessionPhase.PAUSE:
