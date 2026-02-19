@@ -5,7 +5,10 @@ import random
 from loguru import logger
 
 from pymodoro.check_in_screen import CheckInScreen
-from pymodoro.session import SessionPhase, SessionPhaseManager
+from pymodoro.session import (
+    SessionPhase,
+    SessionPhaseManager,
+)
 from pymodoro.settings import AppSettings
 from pymodoro.settings_window import SettingsWindow
 from pymodoro.tray import TrayController
@@ -51,8 +54,10 @@ class PomodoroApp(QtCore.QObject):
         self._tray_controller = TrayController(self._app, self._sp_manager)
 
         self._sp_manager.phaseChanged.connect(self._on_phase_changed)
+        self._sp_manager.phaseEndingSoon.connect(self._on_phase_ending_soon)
         self._sp_manager.workEnded.connect(self._show_check_in_window)
         self._tray_controller.pauseUntilRequested.connect(self._sp_manager.pause_until)
+        self._tray_controller.snoozeRequested.connect(self._on_snoozed_clicked)
         self._tray_controller.resumeRequested.connect(self._sp_manager.resume)
         self._tray_controller.quitRequested.connect(self._app.quit)
         self._tray_controller.openAppRequested.connect(self._open_settings_window)
@@ -101,7 +106,6 @@ class PomodoroApp(QtCore.QObject):
         if self._check_in_screen is None:
             self._check_in_screen = CheckInScreen(check_in_prompt=check_in_prompt)
             self._check_in_screen.submitted.connect(self._on_check_in_screen_submit)
-            self._check_in_screen.snoozed.connect(self._on_check_in_snooze)
         else:
             self._check_in_screen.set_check_in_prompt(check_in_prompt)
         self._check_in_screen.show()
@@ -110,9 +114,17 @@ class PomodoroApp(QtCore.QObject):
         logger.info("Answer: {} | focus_rating: {}", answer, focus_rating)
         self._close_check_in_window()
 
-    def _on_check_in_snooze(self) -> None:
-        self._close_check_in_window()
-        self._sp_manager.snooze_break()
+    def _on_phase_ending_soon(self, phase: SessionPhase) -> None:
+        if phase != SessionPhase.WORK:
+            return
+        self._tray_controller.show_message(
+            f"{phase.value} ends soon",
+            "You're doing great!",
+            timeout_ms=5_000,
+        )
+
+    def _on_snoozed_clicked(self) -> None:
+        self._sp_manager.extend_current_phase()
 
     def _close_check_in_window(self) -> None:
         if self._check_in_screen is not None:

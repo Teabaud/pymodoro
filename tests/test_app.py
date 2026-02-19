@@ -25,11 +25,13 @@ class DummySignal:
 class DummySessionPhaseManager:
     def __init__(self, *_: Any, **__: Any) -> None:
         self.phaseChanged = DummySignal()
+        self.phaseEndingSoon = DummySignal()
         self.workEnded = DummySignal()
         self.start_called = False
         self.pause_until_called: list[Any] = []
         self.resume_called = False
-        self.snooze_break_called = False
+        self.extend_current_phase_called = 0
+        self.extend_current_phase_seconds: int | None = None
         self.start_work_phase_called: list[int] = []
         self.start_break_phase_called: list[int] = []
         self.session_phase = SessionPhase.WORK
@@ -43,8 +45,9 @@ class DummySessionPhaseManager:
     def resume(self) -> None:
         self.resume_called = True
 
-    def snooze_break(self) -> None:
-        self.snooze_break_called = True
+    def extend_current_phase(self, seconds: int | None = None) -> None:
+        self.extend_current_phase_called += 1
+        self.extend_current_phase_seconds = seconds
 
     def start_work_phase(self, minutes: int) -> None:
         self.start_work_phase_called.append(minutes)
@@ -58,10 +61,12 @@ class DummyTrayController:
         self.openAppRequested = DummySignal()
         self.checkInRequested = DummySignal()
         self.pauseUntilRequested = DummySignal()
+        self.snoozeRequested = DummySignal()
         self.resumeRequested = DummySignal()
         self.quitRequested = DummySignal()
         self.refresh_called = False
         self.show_called = False
+        self.messages: list[dict[str, Any]] = []
 
     def refresh(self) -> None:
         self.refresh_called = True
@@ -69,11 +74,24 @@ class DummyTrayController:
     def show(self) -> None:
         self.show_called = True
 
+    def show_message(
+        self,
+        title: str,
+        message: str,
+        timeout_ms: int = 10_000,
+    ) -> None:
+        self.messages.append(
+            {
+                "title": title,
+                "message": message,
+                "timeout_ms": timeout_ms,
+            }
+        )
+
 
 class DummyPrompt:
     def __init__(self, *_: Any, **__: Any) -> None:
         self.submitted = DummySignal()
-        self.snoozed = DummySignal()
         self.visible = False
         self.show_called = 0
         self.closed = False
@@ -162,9 +180,11 @@ def test_pomodoro_app_wires_controllers(
     assert phase_manager.start_called is True
     assert tray_controller.show_called is True
     assert app._on_phase_changed in phase_manager.phaseChanged._callbacks
+    assert app._on_phase_ending_soon in phase_manager.phaseEndingSoon._callbacks
     assert app._show_check_in_window in phase_manager.workEnded._callbacks
     assert app._show_check_in_window in tray_controller.checkInRequested._callbacks
     assert phase_manager.pause_until in tray_controller.pauseUntilRequested._callbacks
+    assert app._on_snoozed_clicked in tray_controller.snoozeRequested._callbacks
     assert phase_manager.resume in tray_controller.resumeRequested._callbacks
     app._open_settings_window()
     settings_window = cast(DummySettingsWindow, app._settings_window)
@@ -238,7 +258,7 @@ def test_start_break_from_settings_starts_break(
     assert phase_manager.start_break_phase_called == [12]
 
 
-def test_check_in_snooze_closes_prompt_and_snoozes(
+def test_work_phase_ending_warning_allows_tray_snooze(
     monkeypatch: Any, settings: AppSettings
 ) -> None:
     monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
@@ -246,15 +266,31 @@ def test_check_in_snooze_closes_prompt_and_snoozes(
     monkeypatch.setattr(app_module, "CheckInScreen", DummyPrompt)
 
     app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
-    prompt = DummyPrompt()
-    app_any = cast(Any, app)
-    app_any._check_in_screen = prompt
-
-    app._on_check_in_snooze()
-
-    assert prompt.closed is True
     phase_manager = cast(DummySessionPhaseManager, app._sp_manager)
-    assert phase_manager.snooze_break_called is True
+    tray_controller = cast(DummyTrayController, app._tray_controller)
+
+    phase_manager.phaseEndingSoon.emit(SessionPhase.WORK)
+
+    assert len(tray_controller.messages) == 1
+    tray_controller.snoozeRequested.emit()
+    assert phase_manager.extend_current_phase_called == 1
+    assert phase_manager.extend_current_phase_seconds is None
+
+
+def test_non_work_phase_warning_does_not_show_message(
+    monkeypatch: Any, settings: AppSettings
+) -> None:
+    monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
+    monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
+    monkeypatch.setattr(app_module, "CheckInScreen", DummyPrompt)
+
+    app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
+    phase_manager = cast(DummySessionPhaseManager, app._sp_manager)
+    tray_controller = cast(DummyTrayController, app._tray_controller)
+
+    phase_manager.phaseEndingSoon.emit(SessionPhase.BREAK)
+
+    assert tray_controller.messages == []
 
 
 def test_note_submit_closes_prompt(monkeypatch: Any, settings: AppSettings) -> None:

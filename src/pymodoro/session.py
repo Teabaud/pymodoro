@@ -10,6 +10,7 @@ from pymodoro.settings import AppSettings
 from PySide6 import QtCore
 
 LATE_FINISH_RESTART_THRESHOLD_MS = 10_000
+PHASE_CHANGE_WARNING_MS = 60_000
 
 
 class SessionPhase(str, Enum):
@@ -20,15 +21,18 @@ class SessionPhase(str, Enum):
 
 class SleepRecoveryTimer(QtCore.QObject):
     finished = QtCore.Signal(int)
+    phaseEndingSoon = QtCore.Signal()
 
     def __init__(
         self,
         heartbeat_interval_ms: int = 3_000,
         sleep_gap_threshold_ms: int = 10_000,
+        phase_change_warning_ms: int = PHASE_CHANGE_WARNING_MS,
         parent: QtCore.QObject | None = None,
     ) -> None:
         super().__init__(parent)
         self._sleep_gap_threshold_ms = sleep_gap_threshold_ms
+        self._phase_change_warning_ms = phase_change_warning_ms
 
         self._phase_timer = QtCore.QTimer(self)
         self._phase_timer.setSingleShot(True)
@@ -37,6 +41,10 @@ class SleepRecoveryTimer(QtCore.QObject):
         self._heartbeat_timer = QtCore.QTimer(self)
         self._heartbeat_timer.setInterval(heartbeat_interval_ms)
         self._heartbeat_timer.timeout.connect(self._on_heartbeat_timeout)
+
+        self._phase_warning_timer = QtCore.QTimer(self)
+        self._phase_warning_timer.setSingleShot(True)
+        self._phase_warning_timer.timeout.connect(self.phaseEndingSoon.emit)
 
         self._ends_at: QtCore.QDateTime | None = None
         self._last_heartbeat_at: QtCore.QDateTime | None = None
@@ -50,6 +58,7 @@ class SleepRecoveryTimer(QtCore.QObject):
         self._phase_timer.stop()
         self._phase_timer.setInterval(duration_ms)
         self._phase_timer.start()
+        self._schedule_phase_warning(now)
 
         if not self._heartbeat_timer.isActive():
             self._heartbeat_timer.start()
@@ -57,8 +66,24 @@ class SleepRecoveryTimer(QtCore.QObject):
     def stop(self) -> None:
         self._phase_timer.stop()
         self._heartbeat_timer.stop()
+        self._phase_warning_timer.stop()
         self._ends_at = None
         self._last_heartbeat_at = None
+
+    def extend(self, seconds: int) -> None:
+        if self._ends_at is None:
+            return
+
+        now = QtCore.QDateTime.currentDateTime()
+        self._ends_at = self._ends_at.addSecs(seconds)
+        remaining_ms = max(0, now.msecsTo(self._ends_at))
+        self._phase_timer.stop()
+        self._phase_timer.setInterval(remaining_ms)
+        self._phase_timer.start()
+        self._schedule_phase_warning(now)
+
+        if not self._heartbeat_timer.isActive():
+            self._heartbeat_timer.start()
 
     def remaining_ms(self) -> int:
         return self._phase_timer.remainingTime()
@@ -72,6 +97,7 @@ class SleepRecoveryTimer(QtCore.QObject):
         return self._last_heartbeat_at.msecsTo(now) > self._sleep_gap_threshold_ms
 
     def _on_phase_timer_timeout(self) -> None:
+        self._phase_warning_timer.stop()
         self.finished.emit(0)
 
     def _on_heartbeat_timeout(self) -> None:
@@ -89,16 +115,31 @@ class SleepRecoveryTimer(QtCore.QObject):
         if remaining_ms <= 0:
             missed_by_ms = abs(remaining_ms)
             self._phase_timer.stop()
+            self._phase_warning_timer.stop()
             self.finished.emit(missed_by_ms)
             return
 
         self._phase_timer.stop()
         self._phase_timer.setInterval(remaining_ms)
         self._phase_timer.start()
+        self._schedule_phase_warning(now)
+
+    def _schedule_phase_warning(self, now: QtCore.QDateTime) -> None:
+        if self._ends_at is None:
+            return
+        self._phase_warning_timer.stop()
+        warning_at = self._ends_at.addMSecs(-self._phase_change_warning_ms)
+        warning_delay_ms = now.msecsTo(warning_at)
+        if warning_delay_ms <= 0:
+            self.phaseEndingSoon.emit()
+            return
+        self._phase_warning_timer.start(warning_delay_ms)
+
 
 
 class SessionPhaseManager(QtCore.QObject):
     phaseChanged = QtCore.Signal(SessionPhase, SessionPhase)
+    phaseEndingSoon = QtCore.Signal(SessionPhase)
     workEnded = QtCore.Signal()
 
     def __init__(
@@ -112,6 +153,7 @@ class SessionPhaseManager(QtCore.QObject):
         self._phase = SessionPhase.BREAK
         self._timer = SleepRecoveryTimer(parent=self)
         self._timer.finished.connect(self._on_timer_finished)
+        self._timer.phaseEndingSoon.connect(self._on_phase_ending_soon)
 
     @property
     def session_phase(self) -> SessionPhase:
@@ -148,16 +190,20 @@ class SessionPhaseManager(QtCore.QObject):
         seconds = QtCore.QDateTime.currentDateTime().secsTo(target_datetime)
         self._start_phase(SessionPhase.PAUSE, seconds)
 
-    def snooze_break(self, seconds: int | None = None) -> None:
+    def extend_current_phase(self, seconds: int | None = None) -> None:
         seconds = seconds or self._settings.timers.snooze_duration
-        self.start_work_phase(seconds)
+        self._timer.extend(seconds)
+        logger.info(str(self))
 
     def _start_phase(self, phase: SessionPhase, seconds: int) -> None:
         previous_phase = self._phase
-        self._timer.start(seconds)
         self._phase = phase
+        self._timer.start(seconds)
         self.phaseChanged.emit(previous_phase, phase)
         logger.info(str(self))
+
+    def _on_phase_ending_soon(self) -> None:
+        self.phaseEndingSoon.emit(self._phase)
 
     def ends_at(self) -> QtCore.QDateTime | None:
         return self._timer.ends_at()

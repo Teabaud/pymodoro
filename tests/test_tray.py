@@ -25,10 +25,14 @@ class DummySignal:
 class DummyAction:
     def __init__(self, text: str) -> None:
         self.text = text
+        self.visible = True
         self.triggered = DummySignal()
 
     def setText(self, text: str) -> None:
         self.text = text
+
+    def setVisible(self, visible: bool) -> None:
+        self.visible = visible
 
 
 class DummyMenu:
@@ -47,6 +51,7 @@ class DummyMenu:
 
 class DummyTray:
     ActivationReason = SimpleNamespace(Trigger="trigger")
+    MessageIcon = SimpleNamespace(Information="info", NoIcon="none")
 
     def __init__(self, app: Any) -> None:
         self.app = app
@@ -55,6 +60,7 @@ class DummyTray:
         self.icon: Any | None = None
         self.menu: DummyMenu | None = None
         self.show_called = False
+        self.messages: list[tuple[str, str, Any, int]] = []
 
     def setContextMenu(self, menu: DummyMenu) -> None:
         self.menu = menu
@@ -67,6 +73,9 @@ class DummyTray:
 
     def show(self) -> None:
         self.show_called = True
+
+    def showMessage(self, title: str, message: str, icon: Any, timeout_ms: int) -> None:
+        self.messages.append((title, message, icon, timeout_ms))
 
 
 class DummySessionPhaseManager:
@@ -234,3 +243,37 @@ def test_check_in_action_emits_request(
     tray._action_check_in.triggered.emit()
 
     assert emitted == [True]
+
+
+def test_show_message_enables_snooze_menu_action(
+    qcoreapp: QtCore.QCoreApplication, monkeypatch: Any
+) -> None:
+    monkeypatch.setattr(tray_module.QtWidgets, "QSystemTrayIcon", DummyTray)
+    monkeypatch.setattr(tray_module.QtWidgets, "QMenu", DummyMenu)
+
+    sp_manager = DummySessionPhaseManager(SessionPhase.WORK, remaining_ms=0)
+    tray = TrayController(
+        app=cast(Any, SimpleNamespace()),
+        session_phase_manager=cast(Any, sp_manager),
+    )
+    snoozed: list[bool] = []
+    tray.snoozeRequested.connect(lambda: snoozed.append(True))
+    assert tray._action_snooze.text == "Snooze current phase"
+    assert cast(DummyAction, tray._action_snooze).visible is True
+
+    tray.show_message(
+        "title",
+        "message",
+        timeout_ms=5_000,
+    )
+    tray_icon = cast(DummyTray, tray._tray)
+    assert tray_icon.messages == [
+        (
+            "title",
+            "message",
+            "none",
+            5_000,
+        )
+    ]
+    tray._action_snooze.triggered.emit()
+    assert snoozed == [True]

@@ -8,6 +8,7 @@ from PySide6.QtCore import QDateTime
 
 from pymodoro.session import (
     LATE_FINISH_RESTART_THRESHOLD_MS,
+    PHASE_CHANGE_WARNING_MS,
     SessionPhase,
     SessionPhaseManager,
     SleepRecoveryTimer,
@@ -55,14 +56,23 @@ def test_pause_until_sets_pause_mode_and_interval(monkeypatch: Any) -> None:
     assert sp_manager._timer._phase_timer.interval() == 90_000
 
 
-def test_snooze_break_uses_default_duration() -> None:
-    settings = _make_settings(work_duration=10, break_duration=5, snooze_duration=7)
+
+
+def test_snooze_break_extends_current_work_phase(monkeypatch: Any) -> None:
+    settings = _make_settings(work_duration=120, break_duration=5, snooze_duration=7)
     sp_manager = SessionPhaseManager(settings=settings)
+    fixed_now = QDateTime.fromString("2025-01-01 10:00", "yyyy-MM-dd HH:mm")
+    monkeypatch.setattr(QDateTime, "currentDateTime", lambda: fixed_now)
+    sp_manager.start_work_phase()
+    initial_ends_at = sp_manager.ends_at()
+    assert initial_ends_at is not None
 
-    sp_manager.snooze_break()
+    sp_manager.extend_current_phase()
 
+    snoozed_ends_at = sp_manager.ends_at()
+    assert snoozed_ends_at is not None
     assert sp_manager.session_phase == SessionPhase.WORK
-    assert sp_manager._timer._phase_timer.interval() == 7_000
+    assert sp_manager._timer._phase_timer.interval() == 127_000
 
 
 def test_timeout_transitions_and_emits_work_end() -> None:
@@ -241,3 +251,39 @@ def test_manager_ends_at_str_formats_today(monkeypatch: Any) -> None:
     monkeypatch.setattr(sp_manager._timer, "ends_at", lambda: end_today)
 
     assert sp_manager.ends_at_str() == f"10:30"
+
+
+def test_phase_ending_warning_fires_after_delay_for_long_phase() -> None:
+    settings = _make_settings(work_duration=120, break_duration=5, snooze_duration=2)
+    sp_manager = SessionPhaseManager(settings=settings)
+    warnings: list[SessionPhase] = []
+    sp_manager.phaseEndingSoon.connect(warnings.append)
+
+    sp_manager.start_work_phase()
+    assert sp_manager._timer._phase_warning_timer.interval() == 120_000 - PHASE_CHANGE_WARNING_MS
+    sp_manager._timer._phase_warning_timer.timeout.emit()
+
+    assert warnings == [SessionPhase.WORK]
+
+
+def test_phase_ending_warning_fires_immediately_for_short_phase() -> None:
+    settings = _make_settings(work_duration=45, break_duration=5, snooze_duration=2)
+    sp_manager = SessionPhaseManager(settings=settings)
+    warnings: list[SessionPhase] = []
+    sp_manager.phaseEndingSoon.connect(warnings.append)
+
+    sp_manager.start_work_phase()
+
+    assert warnings == [SessionPhase.WORK]
+
+
+def test_phase_ending_warning_emits_for_break_phase_too() -> None:
+    settings = _make_settings(work_duration=120, break_duration=120, snooze_duration=2)
+    sp_manager = SessionPhaseManager(settings=settings)
+    warnings: list[SessionPhase] = []
+    sp_manager.phaseEndingSoon.connect(warnings.append)
+
+    sp_manager.start_break_phase()
+    sp_manager._timer._phase_warning_timer.timeout.emit()
+
+    assert warnings == [SessionPhase.BREAK]

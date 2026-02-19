@@ -16,6 +16,7 @@ class TrayController(QtCore.QObject):
     openAppRequested = QtCore.Signal()
     checkInRequested = QtCore.Signal()
     pauseUntilRequested = QtCore.Signal(object)
+    snoozeRequested = QtCore.Signal()
     resumeRequested = QtCore.Signal()
     quitRequested = QtCore.Signal()
 
@@ -36,6 +37,8 @@ class TrayController(QtCore.QObject):
         self._action_check_in.triggered.connect(self.checkInRequested.emit)
         self._action_pause = self._menu.addAction("Pause until...")
         self._action_pause.triggered.connect(self._on_pause_action)
+        self._action_snooze = self._menu.addAction("Snooze current phase")
+        self._action_snooze.triggered.connect(self.snoozeRequested.emit)
         self._action_quit = self._menu.addAction("Quit")
         self._action_quit.triggered.connect(self.quitRequested.emit)
         self._tray.setContextMenu(self._menu)
@@ -89,6 +92,19 @@ class TrayController(QtCore.QObject):
         label = TRAY_ICON_LABELS.get(phase, "?")
         pixmap = self._render_icon(label)
         self._tray.setIcon(QtGui.QIcon(pixmap))
+
+    def show_message(
+        self,
+        title: str,
+        message: str,
+        timeout_ms: int = 10_000,
+    ) -> None:
+        self._tray.showMessage(
+            title,
+            message,
+            QtWidgets.QSystemTrayIcon.MessageIcon.NoIcon,
+            timeout_ms,
+        )
 
     def _prompt_pause_until(self) -> QtCore.QDateTime | None:
         default_datetime = QtCore.QDateTime.currentDateTime().addSecs(3600)

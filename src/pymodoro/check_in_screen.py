@@ -43,7 +43,6 @@ SUBMIT_SHORTCUTS = [
 
 class CheckInScreen(QtWidgets.QDialog):
     submitted = QtCore.Signal(str, object)
-    snoozed = QtCore.Signal()
 
     def __init__(
         self,
@@ -63,9 +62,7 @@ class CheckInScreen(QtWidgets.QDialog):
         self._prompt_card = PromptCard(check_in_prompt, self)
         self._focus_rating_widget = FocusRatingWidget(self)
         self._submit_button = QtWidgets.QPushButton("Submit", self)
-        self._snooze_button = QtWidgets.QPushButton("Snooze", self)
         self._submit_button.clicked.connect(self._on_submit)
-        self._snooze_button.clicked.connect(self._on_snooze)
         self._install_submit_shortcuts()
 
         self.setLayout(self._build_layout())
@@ -87,7 +84,6 @@ class CheckInScreen(QtWidgets.QDialog):
         buttons_layout = QtWidgets.QHBoxLayout()
         buttons_layout.addStretch(1)
         buttons_layout.addWidget(self._submit_button)
-        buttons_layout.addWidget(self._snooze_button)
         buttons_layout.addStretch(1)
         layout.addLayout(buttons_layout)
         layout.addStretch(3)
@@ -124,7 +120,3 @@ class CheckInScreen(QtWidgets.QDialog):
             return
         self._answered = True
         self.submitted.emit(prompt_answer, focus_rating)
-
-    def _on_snooze(self) -> None:
-        self._answered = True
-        self.snoozed.emit()
