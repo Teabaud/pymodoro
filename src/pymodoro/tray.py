@@ -11,6 +11,32 @@ TRAY_ICON_LABELS = {
     SessionPhase.PAUSE: "⏸",
 }
 
+PHASE_WARNING_TOAST_STYLESHEET = """
+QWidget#PhaseWarningToast {
+    background: transparent;
+}
+QFrame#PhaseWarningToastContainer {
+    background-color: palette(window);
+    border-radius: 10px;
+    color: palette(window-text);
+}
+QFrame#PhaseWarningToastContainer QLabel {
+    color: palette(window-text);
+    border: none;
+}
+QFrame#PhaseWarningToastContainer QPushButton {
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid palette(mid);
+    background: palette(button);
+    color: palette(button-text);
+}
+QFrame#PhaseWarningToastContainer QPushButton:hover {
+    background: palette(light);
+    border-color: palette(dark);
+}
+"""
+
 
 class TrayController(QtCore.QObject):
     openAppRequested = QtCore.Signal()
@@ -37,8 +63,6 @@ class TrayController(QtCore.QObject):
         self._action_check_in.triggered.connect(self.checkInRequested.emit)
         self._action_pause = self._menu.addAction("Pause until...")
         self._action_pause.triggered.connect(self._on_pause_action)
-        self._action_snooze = self._menu.addAction("Snooze current phase")
-        self._action_snooze.triggered.connect(self.snoozeRequested.emit)
         self._action_quit = self._menu.addAction("Quit")
         self._action_quit.triggered.connect(self.quitRequested.emit)
         self._tray.setContextMenu(self._menu)
@@ -47,6 +71,7 @@ class TrayController(QtCore.QObject):
         self._update_timer = QtCore.QTimer(self)
         self._update_timer.setInterval(1000)
         self._update_timer.timeout.connect(self.refresh)
+        self._phase_warning_toast: PhaseWarningToast | None = None
 
     def show(self) -> None:
         self._tray.show()
@@ -93,18 +118,12 @@ class TrayController(QtCore.QObject):
         pixmap = self._render_icon(label)
         self._tray.setIcon(QtGui.QIcon(pixmap))
 
-    def show_message(
-        self,
-        title: str,
-        message: str,
-        timeout_ms: int = 10_000,
-    ) -> None:
-        self._tray.showMessage(
-            title,
-            message,
-            QtWidgets.QSystemTrayIcon.MessageIcon.NoIcon,
-            timeout_ms,
-        )
+    def show_phase_warning_toast(self, text: str) -> None:
+        self._ensure_phase_warning_toast().show_toast(text=text)
+
+    def hide_phase_warning_toast(self) -> None:
+        if self._phase_warning_toast is not None:
+            self._phase_warning_toast.hide_toast()
 
     def _prompt_pause_until(self) -> QtCore.QDateTime | None:
         default_datetime = QtCore.QDateTime.currentDateTime().addSecs(3600)
@@ -130,6 +149,89 @@ class TrayController(QtCore.QObject):
     ) -> None:
         if reason == QtWidgets.QSystemTrayIcon.ActivationReason.Trigger:
             self.openAppRequested.emit()
+
+    def _ensure_phase_warning_toast(self) -> PhaseWarningToast:
+        if self._phase_warning_toast is None:
+            self._phase_warning_toast = PhaseWarningToast(self)
+            self._phase_warning_toast.snoozeRequested.connect(self.snoozeRequested.emit)
+        return self._phase_warning_toast
+
+
+class PhaseWarningToast(QtWidgets.QWidget):
+    snoozeRequested = QtCore.Signal()
+
+    def __init__(self, parent: QtCore.QObject | None = None) -> None:
+        super().__init__(None)
+        self.setObjectName("PhaseWarningToast")
+        self.setWindowFlags(
+            QtCore.Qt.WindowType.Tool
+            | QtCore.Qt.WindowType.FramelessWindowHint
+            | QtCore.Qt.WindowType.WindowStaysOnTopHint
+        )
+        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground, True)
+
+        self._container = QtWidgets.QFrame(self)
+        self._container.setObjectName("PhaseWarningToastContainer")
+        self._text_label = QtWidgets.QLabel(self._container)
+        self._text_label.setWordWrap(False)
+        text_font = self._text_label.font()
+        text_font.setBold(True)
+        text_font.setPointSize(text_font.pointSize() + 1)
+        self._text_label.setFont(text_font)
+        self._snooze_button = QtWidgets.QPushButton("Snooze", self._container)
+        self._snooze_button.clicked.connect(self._on_snooze_clicked)
+
+        content_layout = QtWidgets.QHBoxLayout()
+        content_layout.setContentsMargins(14, 12, 14, 12)
+        content_layout.setSpacing(14)
+        content_layout.addWidget(
+            self._text_label, 1, QtCore.Qt.AlignmentFlag.AlignVCenter
+        )
+        content_layout.addWidget(
+            self._snooze_button, 0, QtCore.Qt.AlignmentFlag.AlignVCenter
+        )
+        self._container.setLayout(content_layout)
+
+        layout = QtWidgets.QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self._container)
+        self.setLayout(layout)
+        self.setStyleSheet(PHASE_WARNING_TOAST_STYLESHEET)
+
+    def show_toast(self, text: str) -> None:
+        self._text_label.setText(text)
+        self.adjustSize()
+        self._position_bottom_right()
+        self.show()
+        self.raise_()
+
+    def hide_toast(self) -> None:
+        self.hide()
+
+    def _on_snooze_clicked(self) -> None:
+        self.snoozeRequested.emit()
+        self.hide_toast()
+
+    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
+        snooze_rect = QtCore.QRect(
+            self._snooze_button.mapTo(self, QtCore.QPoint(0, 0)),
+            self._snooze_button.size(),
+        )
+        if not snooze_rect.contains(event.pos()):
+            self.hide_toast()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def _position_bottom_right(self) -> None:
+        screen = QtWidgets.QApplication.primaryScreen()
+        if screen is None:
+            return
+        available = screen.availableGeometry()
+        x = available.right() - self.width() - 16
+        y = available.bottom() - self.height() - 16
+        self.move(x, y)
 
 
 class PauseUntilDialog(QtWidgets.QDialog):

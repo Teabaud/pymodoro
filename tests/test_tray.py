@@ -93,6 +93,19 @@ class DummySessionPhaseManager:
         return QtCore.QTime(0, 0).addMSecs(self._remaining_ms).toString("hh:mm:ss")
 
 
+class DummySnackbar:
+    def __init__(self, *_: Any, **__: Any) -> None:
+        self.snoozeRequested = DummySignal()
+        self.show_calls: list[str] = []
+        self.hide_calls = 0
+
+    def show_toast(self, text: str) -> None:
+        self.show_calls.append(text)
+
+    def hide_toast(self) -> None:
+        self.hide_calls += 1
+
+
 def test_refresh_updates_pause_tooltip_and_icon(
     qcoreapp: QtCore.QCoreApplication, monkeypatch: Any
 ) -> None:
@@ -245,11 +258,12 @@ def test_check_in_action_emits_request(
     assert emitted == [True]
 
 
-def test_show_message_enables_snooze_menu_action(
+def test_show_phase_warning_toast_enables_snooze_action(
     qcoreapp: QtCore.QCoreApplication, monkeypatch: Any
 ) -> None:
     monkeypatch.setattr(tray_module.QtWidgets, "QSystemTrayIcon", DummyTray)
     monkeypatch.setattr(tray_module.QtWidgets, "QMenu", DummyMenu)
+    monkeypatch.setattr(tray_module, "PhaseWarningToast", DummySnackbar)
 
     sp_manager = DummySessionPhaseManager(SessionPhase.WORK, remaining_ms=0)
     tray = TrayController(
@@ -258,22 +272,29 @@ def test_show_message_enables_snooze_menu_action(
     )
     snoozed: list[bool] = []
     tray.snoozeRequested.connect(lambda: snoozed.append(True))
-    assert tray._action_snooze.text == "Snooze current phase"
-    assert cast(DummyAction, tray._action_snooze).visible is True
+    tray.show_phase_warning_toast(text="Session ending soon")
+    snackbar = cast(DummySnackbar, tray._phase_warning_toast)
+    assert snackbar.show_calls == ["Session ending soon"]
 
-    tray.show_message(
-        "title",
-        "message",
-        timeout_ms=5_000,
-    )
-    tray_icon = cast(DummyTray, tray._tray)
-    assert tray_icon.messages == [
-        (
-            "title",
-            "message",
-            "none",
-            5_000,
-        )
-    ]
-    tray._action_snooze.triggered.emit()
+    snackbar.snoozeRequested.emit()
     assert snoozed == [True]
+
+
+def test_hide_phase_warning_toast_hides_active_toast(
+    qcoreapp: QtCore.QCoreApplication, monkeypatch: Any
+) -> None:
+    monkeypatch.setattr(tray_module.QtWidgets, "QSystemTrayIcon", DummyTray)
+    monkeypatch.setattr(tray_module.QtWidgets, "QMenu", DummyMenu)
+    monkeypatch.setattr(tray_module, "PhaseWarningToast", DummySnackbar)
+
+    sp_manager = DummySessionPhaseManager(SessionPhase.WORK, remaining_ms=0)
+    tray = TrayController(
+        app=cast(Any, SimpleNamespace()),
+        session_phase_manager=cast(Any, sp_manager),
+    )
+    tray.show_phase_warning_toast(text="Session ending soon")
+
+    tray.hide_phase_warning_toast()
+
+    snackbar = cast(DummySnackbar, tray._phase_warning_toast)
+    assert snackbar.hide_calls == 1

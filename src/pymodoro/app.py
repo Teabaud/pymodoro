@@ -95,6 +95,7 @@ class PomodoroApp(QtCore.QObject):
 
     def _on_phase_changed(self, _: SessionPhase, current_phase: SessionPhase) -> None:
         self._tray_controller.refresh()
+        self._tray_controller.hide_phase_warning_toast()
         if self._settings_window and self._settings_window.isVisible():
             self._settings_window.set_paused(current_phase == SessionPhase.PAUSE)
 
@@ -116,10 +117,8 @@ class PomodoroApp(QtCore.QObject):
     def _on_phase_ending_soon(self, phase: SessionPhase) -> None:
         if phase != SessionPhase.WORK:
             return
-        self._tray_controller.show_message(
-            f"{phase.value} ends soon",
-            "You're doing great!",
-            timeout_ms=5_000,
+        self._tray_controller.show_phase_warning_toast(
+            text=f"{phase.value} ending soon"
         )
 
     def _on_snoozed_clicked(self) -> None:

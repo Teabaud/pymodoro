@@ -56,8 +56,6 @@ def test_pause_until_sets_pause_mode_and_interval(monkeypatch: Any) -> None:
     assert sp_manager._timer._phase_timer.interval() == 90_000
 
 
-
-
 def test_snooze_break_extends_current_work_phase(monkeypatch: Any) -> None:
     settings = _make_settings(work_duration=120, break_duration=5, snooze_duration=7)
     sp_manager = SessionPhaseManager(settings=settings)
@@ -260,7 +258,10 @@ def test_phase_ending_warning_fires_after_delay_for_long_phase() -> None:
     sp_manager.phaseEndingSoon.connect(warnings.append)
 
     sp_manager.start_work_phase()
-    assert sp_manager._timer._phase_warning_timer.interval() == 120_000 - PHASE_CHANGE_WARNING_MS
+    assert (
+        sp_manager._timer._phase_warning_timer.interval()
+        == 120_000 - PHASE_CHANGE_WARNING_MS
+    )
     sp_manager._timer._phase_warning_timer.timeout.emit()
 
     assert warnings == [SessionPhase.WORK]

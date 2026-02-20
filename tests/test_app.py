@@ -55,6 +55,9 @@ class DummySessionPhaseManager:
     def start_break_phase(self, minutes: int) -> None:
         self.start_break_phase_called.append(minutes)
 
+    def remaining_ms(self) -> int:
+        return 45_000
+
 
 class DummyTrayController:
     def __init__(self, *_: Any, **__: Any) -> None:
@@ -66,7 +69,8 @@ class DummyTrayController:
         self.quitRequested = DummySignal()
         self.refresh_called = False
         self.show_called = False
-        self.messages: list[dict[str, Any]] = []
+        self.toast_messages: list[dict[str, Any]] = []
+        self.hide_phase_warning_toast_called = 0
 
     def refresh(self) -> None:
         self.refresh_called = True
@@ -74,19 +78,11 @@ class DummyTrayController:
     def show(self) -> None:
         self.show_called = True
 
-    def show_message(
-        self,
-        title: str,
-        message: str,
-        timeout_ms: int = 10_000,
-    ) -> None:
-        self.messages.append(
-            {
-                "title": title,
-                "message": message,
-                "timeout_ms": timeout_ms,
-            }
-        )
+    def show_phase_warning_toast(self, text: str) -> None:
+        self.toast_messages.append({"text": text})
+
+    def hide_phase_warning_toast(self) -> None:
+        self.hide_phase_warning_toast_called += 1
 
 
 class DummyPrompt:
@@ -271,7 +267,11 @@ def test_work_phase_ending_warning_allows_tray_snooze(
 
     phase_manager.phaseEndingSoon.emit(SessionPhase.WORK)
 
-    assert len(tray_controller.messages) == 1
+    assert tray_controller.toast_messages == [
+        {
+            "text": "Work ending soon",
+        }
+    ]
     tray_controller.snoozeRequested.emit()
     assert phase_manager.extend_current_phase_called == 1
     assert phase_manager.extend_current_phase_seconds is None
@@ -290,7 +290,22 @@ def test_non_work_phase_warning_does_not_show_message(
 
     phase_manager.phaseEndingSoon.emit(SessionPhase.BREAK)
 
-    assert tray_controller.messages == []
+    assert tray_controller.toast_messages == []
+
+
+def test_phase_change_hides_warning_toast_on_phase_change(
+    monkeypatch: Any, settings: AppSettings
+) -> None:
+    monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
+    monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
+    monkeypatch.setattr(app_module, "CheckInScreen", DummyPrompt)
+
+    app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
+    tray_controller = cast(DummyTrayController, app._tray_controller)
+
+    app._sp_manager.phaseChanged.emit(SessionPhase.WORK, SessionPhase.BREAK)
+
+    assert tray_controller.hide_phase_warning_toast_called == 1
 
 
 def test_note_submit_closes_prompt(monkeypatch: Any, settings: AppSettings) -> None:

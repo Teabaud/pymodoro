@@ -136,7 +136,6 @@ class SleepRecoveryTimer(QtCore.QObject):
         self._phase_warning_timer.start(warning_delay_ms)
 
 
-
 class SessionPhaseManager(QtCore.QObject):
     phaseChanged = QtCore.Signal(SessionPhase, SessionPhase)
     phaseEndingSoon = QtCore.Signal(SessionPhase)
@@ -198,8 +197,8 @@ class SessionPhaseManager(QtCore.QObject):
     def _start_phase(self, phase: SessionPhase, seconds: int) -> None:
         previous_phase = self._phase
         self._phase = phase
-        self._timer.start(seconds)
         self.phaseChanged.emit(previous_phase, phase)
+        self._timer.start(seconds)
         logger.info(str(self))
 
     def _on_phase_ending_soon(self) -> None:
@@ -218,7 +217,7 @@ class SessionPhaseManager(QtCore.QObject):
         phase_ends_today: bool = ends_at.date() == QtCore.QDate.currentDate()
         datetime_str: str = "HH:mm" if phase_ends_today else "yyyy-MM-dd HH:mm"
         return ends_at.toString(datetime_str)
-        
+
     def time_left_str(self) -> str:
         remaining_ms = self.remaining_ms()
         if remaining_ms < 0:
