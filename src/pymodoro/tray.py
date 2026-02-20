@@ -11,32 +11,6 @@ TRAY_ICON_LABELS = {
     SessionPhase.PAUSE: "⏸",
 }
 
-PHASE_WARNING_TOAST_STYLESHEET = """
-QWidget#PhaseWarningToast {
-    background: transparent;
-}
-QFrame#PhaseWarningToastContainer {
-    background-color: palette(window);
-    border-radius: 10px;
-    color: palette(window-text);
-}
-QFrame#PhaseWarningToastContainer QLabel {
-    color: palette(window-text);
-    border: none;
-}
-QFrame#PhaseWarningToastContainer QPushButton {
-    padding: 6px 12px;
-    border-radius: 6px;
-    border: 1px solid palette(mid);
-    background: palette(button);
-    color: palette(button-text);
-}
-QFrame#PhaseWarningToastContainer QPushButton:hover {
-    background: palette(light);
-    border-color: palette(dark);
-}
-"""
-
 
 class TrayController(QtCore.QObject):
     openAppRequested = QtCore.Signal()
@@ -84,11 +58,11 @@ class TrayController(QtCore.QObject):
         pixmap.fill(QtCore.Qt.GlobalColor.transparent)
         painter = QtGui.QPainter(pixmap)
         painter.setRenderHint(QtGui.QPainter.RenderHint.TextAntialiasing)
-        palette = QtWidgets.QApplication.palette()
+        palette = self._menu.palette()
         if self._session_phase_manager.session_phase == SessionPhase.PAUSE:
             color = QtGui.QColor("#b53131")
         else:
-            color = palette.color(QtGui.QPalette.ColorRole.WindowText)
+            color = palette.color(QtGui.QPalette.ColorRole.Text)
         painter.setPen(color)
         painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
         font = QtGui.QFont("Sans Serif", int(size * 0.7), QtGui.QFont.Weight.ExtraBold)
@@ -157,7 +131,7 @@ class TrayController(QtCore.QObject):
         return self._phase_warning_toast
 
 
-class PhaseWarningToast(QtWidgets.QWidget):
+class PhaseWarningToast(QtWidgets.QFrame):
     snoozeRequested = QtCore.Signal()
 
     def __init__(self, parent: QtCore.QObject | None = None) -> None:
@@ -169,17 +143,16 @@ class PhaseWarningToast(QtWidgets.QWidget):
             | QtCore.Qt.WindowType.WindowStaysOnTopHint
         )
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
-        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
+        self.setFrameShadow(QtWidgets.QFrame.Shadow.Raised)
 
-        self._container = QtWidgets.QFrame(self)
-        self._container.setObjectName("PhaseWarningToastContainer")
-        self._text_label = QtWidgets.QLabel(self._container)
+        self._text_label = QtWidgets.QLabel(self)
         self._text_label.setWordWrap(False)
         text_font = self._text_label.font()
         text_font.setBold(True)
         text_font.setPointSize(text_font.pointSize() + 1)
         self._text_label.setFont(text_font)
-        self._snooze_button = QtWidgets.QPushButton("Snooze", self._container)
+        self._snooze_button = QtWidgets.QPushButton("Snooze", self)
         self._snooze_button.clicked.connect(self._on_snooze_clicked)
 
         content_layout = QtWidgets.QHBoxLayout()
@@ -191,13 +164,7 @@ class PhaseWarningToast(QtWidgets.QWidget):
         content_layout.addWidget(
             self._snooze_button, 0, QtCore.Qt.AlignmentFlag.AlignVCenter
         )
-        self._container.setLayout(content_layout)
-
-        layout = QtWidgets.QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self._container)
-        self.setLayout(layout)
-        self.setStyleSheet(PHASE_WARNING_TOAST_STYLESHEET)
+        self.setLayout(content_layout)
 
     def show_toast(self, text: str) -> None:
         self._text_label.setText(text)
@@ -214,11 +181,7 @@ class PhaseWarningToast(QtWidgets.QWidget):
         self.hide_toast()
 
     def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
-        snooze_rect = QtCore.QRect(
-            self._snooze_button.mapTo(self, QtCore.QPoint(0, 0)),
-            self._snooze_button.size(),
-        )
-        if not snooze_rect.contains(event.pos()):
+        if not self._snooze_button.geometry().contains(event.pos()):
             self.hide_toast()
             event.accept()
             return

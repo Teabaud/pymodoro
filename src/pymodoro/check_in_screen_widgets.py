@@ -86,15 +86,6 @@ class FocusRatingWidget(QWidget):
         layout.addStretch(1)
         self.setLayout(layout)
 
-        # Make selected rating visually distinct
-        self.setStyleSheet("""
-            QPushButton:checked {
-                background-color: palette(highlight);
-                color: palette(highlighted-text);
-                font-weight: bold;
-            }
-        """)
-
     def _make_button_handler(self, value: int, button: QPushButton):
         def handler() -> None:
             if self._rating == value:

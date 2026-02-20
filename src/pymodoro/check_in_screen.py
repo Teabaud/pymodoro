@@ -4,12 +4,8 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 from pymodoro.check_in_screen_widgets import FocusRatingWidget, PromptCard
 
+
 STYLESHEET = """
-QDialog {
-    background-color: #101113;
-    color: #f0f0f0;
-    font-family: "Inter", "Segoe UI", sans-serif;
-}
 QLabel {
     font-size: 32px;
     font-weight: 600;
@@ -17,23 +13,14 @@ QLabel {
 QPlainTextEdit {
     font-size: 18px;
     padding: 12px;
-    border: 1px solid #2d2f33;
-    border-radius: 10px;
-    background-color: #181a1d;
-    color: #f0f0f0;
     min-height: 140px;
 }
 QPushButton {
     font-size: 18px;
     padding: 10px 26px;
-    border-radius: 10px;
-    background-color: #2b4fff;
-    color: #ffffff;
-}
-QPushButton:hover {
-    background-color: #4a6bff;
 }
 """
+
 
 SUBMIT_SHORTCUTS = [
     QtGui.QKeySequence("Ctrl+Return"),
