@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from pymodoro.session import SessionPhase, SessionPhaseManager
 
 # isort: split
 from PySide6 import QtCore, QtGui, QtWidgets
 
-TRAY_ICON_LABELS = {
-    SessionPhase.WORK: "W",
-    SessionPhase.BREAK: "☕",
-    SessionPhase.PAUSE: "⏸",
+_ICON_DIR = Path(__file__).parent / "icons"
+_PHASE_ICON_FILES = {
+    SessionPhase.WORK: _ICON_DIR / "icon-work.svg",
+    SessionPhase.BREAK: _ICON_DIR / "icon-break.svg",
+    SessionPhase.PAUSE: _ICON_DIR / "icon-paused.svg",
 }
 
 
@@ -45,6 +48,7 @@ class TrayController(QtCore.QObject):
         self._update_timer = QtCore.QTimer(self)
         self._update_timer.setInterval(1000)
         self._update_timer.timeout.connect(self.refresh)
+        self._current_icon_phase: SessionPhase | None = None
         self._phase_warning_toast: PhaseWarningToast | None = None
 
     def show(self) -> None:
@@ -52,29 +56,13 @@ class TrayController(QtCore.QObject):
         self._update_timer.start()
         self.refresh()
 
-    def _render_icon(self, label: str) -> QtGui.QPixmap:
-        size = 124
-        pixmap = QtGui.QPixmap(size, size)
-        pixmap.fill(QtCore.Qt.GlobalColor.transparent)
-        painter = QtGui.QPainter(pixmap)
-        painter.setRenderHint(QtGui.QPainter.RenderHint.TextAntialiasing)
-        palette = self._menu.palette()
-        if self._session_phase_manager.session_phase == SessionPhase.PAUSE:
-            color = QtGui.QColor("#b53131")
-        else:
-            color = palette.color(QtGui.QPalette.ColorRole.Text)
-        painter.setPen(color)
-        painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
-        font = QtGui.QFont("Sans Serif", int(size * 0.7), QtGui.QFont.Weight.ExtraBold)
-        painter.setFont(font)
-        painter.drawText(
-            QtCore.QRect(0, 0, size, size),
-            QtCore.Qt.AlignmentFlag.AlignCenter,
-            label,
-        )
-
-        painter.end()
-        return pixmap
+    def _render_phase_icon(self, phase: SessionPhase) -> None:
+        if phase == self._current_icon_phase:
+            return
+        svg_path = _PHASE_ICON_FILES.get(phase, _PHASE_ICON_FILES[SessionPhase.WORK])
+        icon = QtGui.QIcon(str(svg_path))
+        self._tray.setIcon(icon)
+        self._current_icon_phase = phase
 
     def refresh(self) -> None:
         phase = self._session_phase_manager.session_phase
@@ -88,9 +76,7 @@ class TrayController(QtCore.QObject):
             self._action_pause.setText("Pause until...")
 
         self._tray.setToolTip(tooltip_str)
-        label = TRAY_ICON_LABELS.get(phase, "?")
-        pixmap = self._render_icon(label)
-        self._tray.setIcon(QtGui.QIcon(pixmap))
+        self._render_phase_icon(phase)
 
     def show_phase_warning_toast(self, text: str) -> None:
         self._ensure_phase_warning_toast().show_toast(text=text)

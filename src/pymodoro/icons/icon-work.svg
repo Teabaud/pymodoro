@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Taller (length 21), slimmer (width 5.5) petals — more upright, more flame-like -->
+  <g transform="translate(16,23)">
+    <path transform="rotate(-20)" d="M 0 0 C 5.5 -2 5.5 -14 0 -21 C -5.5 -14 -5.5 -2 0 0 Z" fill="#3949AB"/>
+    <path transform="rotate(20)"  d="M 0 0 C 5.5 -2 5.5 -14 0 -21 C -5.5 -14 -5.5 -2 0 0 Z" fill="#3949AB"/>
+    <path transform="rotate(-9)"  d="M 0 0 C 5.5 -2 5.5 -14 0 -21 C -5.5 -14 -5.5 -2 0 0 Z" fill="#5C6BC0"/>
+    <path transform="rotate(9)"   d="M 0 0 C 5.5 -2 5.5 -14 0 -21 C -5.5 -14 -5.5 -2 0 0 Z" fill="#5C6BC0"/>
+    <path                          d="M 0 0 C 5.5 -2 5.5 -14 0 -21 C -5.5 -14 -5.5 -2 0 0 Z" fill="#7986CB"/>
+  </g>
+  <circle cx="16" cy="23" r="3.2" fill="#5C6BC0"/>
+  <circle cx="16" cy="23" r="1.8" fill="#FDD835"/>
+</svg>

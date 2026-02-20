@@ -4,7 +4,6 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 from pymodoro.check_in_screen_widgets import FocusRatingWidget, PromptCard
 
-
 STYLESHEET = """
 QLabel {
     font-size: 32px;
