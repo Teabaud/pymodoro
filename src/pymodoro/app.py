@@ -34,7 +34,6 @@ def _get_qt_app() -> QApplication:
     app = QApplication([])
     app.setQuitOnLastWindowClosed(False)
     app.setApplicationName("Pymodoro")
-    app.setDesktopFileName("pymodoro")
     _apply_theme(app)
     if not QSystemTrayIcon.isSystemTrayAvailable():
         raise RuntimeError("System tray is not available in this session.")
