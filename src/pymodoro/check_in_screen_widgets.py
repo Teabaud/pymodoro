@@ -28,6 +28,7 @@ class PromptCard(QWidget):
 
         self._input = QPlainTextEdit(self)
         self._input.setPlaceholderText("Type your answer here...")
+        self._input.setTabChangesFocus(True)
         self._input.setVisible(True)
 
         layout = QVBoxLayout(self)
