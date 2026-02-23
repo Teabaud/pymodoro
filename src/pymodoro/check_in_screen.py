@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from pymodoro.check_in_screen_widgets import FocusRatingWidget, PromptCard
+from pymodoro.check_in_screen_widgets import (
+    ExerciseWidget,
+    FocusRatingWidget,
+    PromptCard,
+)
 
 STYLESHEET = """
 QLabel {
@@ -13,6 +17,10 @@ QPlainTextEdit {
     font-size: 18px;
     padding: 12px;
     min-height: 140px;
+}
+QLineEdit, QSpinBox {
+    font-size: 18px;
+    padding: 8px;
 }
 QPushButton {
     font-size: 18px;
@@ -28,7 +36,7 @@ SUBMIT_SHORTCUTS = [
 
 
 class CheckInScreen(QtWidgets.QDialog):
-    submitted = QtCore.Signal(str, object)
+    submitted = QtCore.Signal(str, object, object)
 
     def __init__(
         self,
@@ -47,6 +55,7 @@ class CheckInScreen(QtWidgets.QDialog):
 
         self._prompt_card = PromptCard(check_in_prompt, self)
         self._focus_rating_widget = FocusRatingWidget(self)
+        self._exercise_widget = ExerciseWidget(self)
         self._submit_button = QtWidgets.QPushButton("Submit", self)
         self._submit_button.clicked.connect(self._on_submit)
         self._install_submit_shortcuts()
@@ -65,7 +74,10 @@ class CheckInScreen(QtWidgets.QDialog):
         layout.addStretch(2)
         layout.addWidget(self._prompt_card)
         layout.addSpacing(16)
-        layout.addWidget(self._focus_rating_widget)
+        metrics_layout = QtWidgets.QHBoxLayout()
+        metrics_layout.addWidget(self._focus_rating_widget)
+        metrics_layout.addWidget(self._exercise_widget)
+        layout.addLayout(metrics_layout)
         layout.addSpacing(24)
         buttons_layout = QtWidgets.QHBoxLayout()
         buttons_layout.addStretch(1)
@@ -79,6 +91,7 @@ class CheckInScreen(QtWidgets.QDialog):
         super().showEvent(event)
         self._answered = False
         self._focus_rating_widget.set_rating(None)
+        self._exercise_widget.clear()
         self._prompt_card.clear()
         self.showFullScreen()
         self.raise_()
@@ -86,8 +99,9 @@ class CheckInScreen(QtWidgets.QDialog):
         self._prompt_card.focus_input()
 
     def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
+        focused_widget = self.focusWidget()
         input_widget = self._prompt_card.focus_input_widget()
-        if self.focusWidget() is not input_widget:
+        if focused_widget in (None, self):
             self._prompt_card.focus_input()
             QtWidgets.QApplication.sendEvent(input_widget, event)
         else:
@@ -102,7 +116,8 @@ class CheckInScreen(QtWidgets.QDialog):
     def _on_submit(self) -> None:
         prompt_answer = self._prompt_card.answer()
         focus_rating = self._focus_rating_widget.rating
+        exercise_result = self._exercise_widget.exercise_result
         if prompt_answer == "":
             return
         self._answered = True
-        self.submitted.emit(prompt_answer, focus_rating)
+        self.submitted.emit(prompt_answer, focus_rating, exercise_result)

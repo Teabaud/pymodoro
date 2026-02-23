@@ -4,8 +4,10 @@ from PySide6 import QtCore
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPlainTextEdit,
     QPushButton,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -52,6 +54,7 @@ class PromptCard(QWidget):
 
 
 type FocusRating = int | None
+type ExerciseResult = tuple[str, int] | None
 
 
 class FocusRatingWidget(QWidget):
@@ -107,3 +110,44 @@ class FocusRatingWidget(QWidget):
         self._rating = rating
         for index, button in enumerate[QPushButton](self._buttons, start=1):
             button.setChecked(index == rating)
+
+
+class ExerciseWidget(QWidget):
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        label = QLabel("Exercise", self)
+
+        self._rep_count_input = QSpinBox(self)
+        self._rep_count_input.setRange(0, 999)
+        self._rep_count_input.setValue(0)
+        self._rep_count_input.setToolTip("How many reps you did")
+
+        self._exercise_name_input = QLineEdit(self)
+        self._exercise_name_input.setPlaceholderText("name of the exercise")
+
+        layout = QHBoxLayout(self)
+        layout.addStretch(1)
+        layout.addWidget(label)
+        layout.addSpacing(12)
+        layout.addWidget(self._rep_count_input, 1)
+        layout.addSpacing(8)
+        layout.addWidget(self._exercise_name_input, 3)
+        layout.addStretch(1)
+        self.setLayout(layout)
+
+    @property
+    def rep_count(self) -> int:
+        return self._rep_count_input.value()
+
+    @property
+    def exercise_name(self) -> str:
+        return self._exercise_name_input.text().strip()
+
+    @property
+    def exercise_result(self) -> ExerciseResult:
+        if self.exercise_name != "" and self.rep_count > 0:
+            return self.exercise_name, self.rep_count
+
+    def clear(self) -> None:
+        self._rep_count_input.setValue(0)
+        self._exercise_name_input.clear()

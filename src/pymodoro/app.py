@@ -97,8 +97,15 @@ class PomodoroApp(QtCore.QObject):
             self._check_in_screen.set_check_in_prompt(check_in_prompt)
         self._check_in_screen.show()
 
-    def _on_check_in_screen_submit(self, answer: str, focus_rating: int | None) -> None:
-        logger.info("Answer: {} | focus_rating: {}", answer, focus_rating)
+    def _on_check_in_screen_submit(
+        self,
+        answer: str,
+        focus_rating: int | None,
+        exercise_result: tuple[str, int] | None,
+    ) -> None:
+        logger.info(
+            f"Answer: {answer} | focus_rating: {focus_rating} | exercise_result: {exercise_result}"
+        )
         self._close_check_in_window()
 
     def _on_phase_ending_soon(self, phase: SessionPhase) -> None:

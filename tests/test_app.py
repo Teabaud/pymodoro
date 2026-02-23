@@ -318,7 +318,7 @@ def test_note_submit_closes_prompt(monkeypatch: Any, settings: AppSettings) -> N
     app_any = cast(Any, app)
     app_any._check_in_screen = prompt
 
-    app._on_check_in_screen_submit("done", None)
+    app._on_check_in_screen_submit("done", None, None)
 
     assert prompt.closed is True
 
