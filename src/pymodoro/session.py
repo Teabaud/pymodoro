@@ -226,5 +226,5 @@ class SessionPhaseManager(QtCore.QObject):
 
     def __str__(self) -> str:
         if self._phase == SessionPhase.PAUSE:
-            return self.ends_at_str()
-        return self.time_left_str()
+            return f"Paused until {self.ends_at_str()}"
+        return f"{self._phase.value} - {self.time_left_str()}"

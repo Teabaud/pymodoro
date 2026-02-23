@@ -113,6 +113,7 @@ class SettingsWindow(QDialog):
         pause_datetime = self._prompt_pause_until()
         if pause_datetime is not None:
             self.pauseUntilRequested.emit(pause_datetime)
+            self.close()
 
     def _prompt_duration(self, title: str, default_seconds: int) -> int | None:
         dialog = DurationSelectionDialog(title, default_seconds // 60, self)
@@ -126,6 +127,7 @@ class SettingsWindow(QDialog):
         )
         if seconds is not None:
             self.startWorkRequested.emit(seconds)
+            self.close()
 
     def _on_start_break_clicked(self) -> None:
         seconds = self._prompt_duration(
@@ -133,6 +135,7 @@ class SettingsWindow(QDialog):
         )
         if seconds is not None:
             self.startBreakRequested.emit(seconds)
+            self.close()
 
     def _mark_dirty(self) -> None:
         self._dirty = True
