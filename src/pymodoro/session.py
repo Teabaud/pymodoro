@@ -9,8 +9,13 @@ from pymodoro.settings import AppSettings
 # isort: split
 from PySide6 import QtCore
 
-LATE_FINISH_RESTART_THRESHOLD_MS = 10_000
-PHASE_CHANGE_WARNING_MS = 60_000
+SECONDS = 1000
+MINUTES = 60 * SECONDS
+HOURS = 60 * MINUTES
+
+LATE_FINISH_RESTART_THRESHOLD_MS = 10 * SECONDS
+PHASE_CHANGE_WARNING_MS = 1 * MINUTES
+SLEEP_GAP_THRESHOLD_MS = 5 * MINUTES
 
 
 class SessionPhase(str, Enum):
@@ -25,8 +30,8 @@ class SleepRecoveryTimer(QtCore.QObject):
 
     def __init__(
         self,
-        heartbeat_interval_ms: int = 3_000,
-        sleep_gap_threshold_ms: int = 10_000,
+        heartbeat_interval_ms: int = 10 * SECONDS,
+        sleep_gap_threshold_ms: int = SLEEP_GAP_THRESHOLD_MS,
         phase_change_warning_ms: int = PHASE_CHANGE_WARNING_MS,
         parent: QtCore.QObject | None = None,
     ) -> None:
