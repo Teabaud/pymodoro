@@ -368,6 +368,3 @@ class CheckInPromptsSectionWidget(QGroupBox):
 
         layout.addWidget(self.prompts_editor)
         layout.addWidget(self.add_prompt_button)
-
-    def to_check_in_prompts(self) -> list[str]:
-        return self.prompts_editor.get_prompts()

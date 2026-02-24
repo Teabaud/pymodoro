@@ -104,7 +104,8 @@ class SleepRecoveryTimer(QtCore.QObject):
     def _on_heartbeat_timeout(self) -> None:
         now = QtCore.QDateTime.currentDateTime()
         self._last_heartbeat_at = now
-        self._recover_after_sleep(now)
+        if self.detect_sleep_gap(now):
+           self._recover_after_sleep(now)
 
     def _recover_after_sleep(self, now: QtCore.QDateTime) -> None:
         if self._ends_at is None:

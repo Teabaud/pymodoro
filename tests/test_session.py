@@ -175,7 +175,7 @@ def test_sleep_recovery_timer_emits_missed_by_when_sleep_passes_deadline(
     assert timer.remaining_seconds() == -1
 
 
-def test_sleep_recovery_timer_resyncs_when_deadline_still_in_future(
+def test_sleep_recovery_timer_does_not_resync_for_short_heartbeat_gap(
     monkeypatch: Any,
 ) -> None:
     timer = SleepRecoveryTimer()
@@ -190,7 +190,25 @@ def test_sleep_recovery_timer_resyncs_when_deadline_still_in_future(
     timer._on_heartbeat_timeout()
 
     assert completed == []
-    assert timer._phase_timer.interval() == 60_000
+    assert timer._phase_timer.interval() == 180_000
+
+
+def test_sleep_recovery_timer_resyncs_when_sleep_gap_detected(
+    monkeypatch: Any,
+) -> None:
+    timer = SleepRecoveryTimer()
+    fixed_now = QDateTime.fromString("2025-01-01 10:00", "yyyy-MM-dd HH:mm")
+    now_box = {"current": fixed_now}
+    monkeypatch.setattr(QDateTime, "currentDateTime", lambda: now_box["current"])
+    completed: list[int] = []
+    timer.finished.connect(completed.append)
+
+    timer.start(900)
+    now_box["current"] = fixed_now.addSecs(8 * 60)
+    timer._on_heartbeat_timeout()
+
+    assert completed == []
+    assert timer._phase_timer.interval() == 420_000
 
 
 def test_manager_reads_are_pure(monkeypatch: Any) -> None:

@@ -161,7 +161,6 @@ class SettingsWindow(QDialog):
         self._settings.timers = timers
         self._settings.check_in.prompts = check_in_prompts
         save_settings(self._settings)
-        self._draft = SettingsDraft.from_settings(self._settings)
         self._dirty = False
         self.settingsSaved.emit()
         return True
