@@ -9,6 +9,7 @@ from PySide6.QtCore import QDateTime
 from pymodoro.session import (
     LATE_FINISH_RESTART_THRESHOLD_SEC,
     PHASE_CHANGE_WARNING_SEC,
+    SLEEP_GAP_THRESHOLD_SEC,
     SessionPhase,
     SessionPhaseManager,
     SleepRecoveryTimer,
@@ -186,7 +187,7 @@ def test_sleep_recovery_timer_does_not_resync_for_short_heartbeat_gap(
     timer.finished.connect(completed.append)
 
     timer.start(180)
-    now_box["current"] = fixed_now.addSecs(120)
+    now_box["current"] = fixed_now.addSecs(SLEEP_GAP_THRESHOLD_SEC - 1)
     timer._on_heartbeat_timeout()
 
     assert completed == []

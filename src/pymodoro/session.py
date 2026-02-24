@@ -9,9 +9,9 @@ from pymodoro.settings import AppSettings
 # isort: split
 from PySide6 import QtCore
 
-LATE_FINISH_RESTART_THRESHOLD_SEC = 10
-PHASE_CHANGE_WARNING_SEC = 1 * 60
-SLEEP_GAP_THRESHOLD_SEC = 5 * 60
+LATE_FINISH_RESTART_THRESHOLD_SEC = 300
+PHASE_CHANGE_WARNING_SEC = 60
+SLEEP_GAP_THRESHOLD_SEC = 30
 
 
 class SessionPhase(str, Enum):
@@ -26,7 +26,7 @@ class SleepRecoveryTimer(QtCore.QObject):
 
     def __init__(
         self,
-        heartbeat_interval_sec: int = 10,
+        heartbeat_interval_sec: int = SLEEP_GAP_THRESHOLD_SEC // 3,
         sleep_gap_threshold_sec: int = SLEEP_GAP_THRESHOLD_SEC,
         phase_change_warning_sec: int = PHASE_CHANGE_WARNING_SEC,
         parent: QtCore.QObject | None = None,
@@ -93,9 +93,12 @@ class SleepRecoveryTimer(QtCore.QObject):
         return self._ends_at
 
     def detect_sleep_gap(self, now: QtCore.QDateTime) -> bool:
-        if self._last_heartbeat_at is None:
-            return False
-        return self._last_heartbeat_at.secsTo(now) > self._sleep_gap_threshold_sec
+        detected = False
+        if self._last_heartbeat_at is not None:
+            secs_to_last_heartbeat = self._last_heartbeat_at.secsTo(now)
+            detected = secs_to_last_heartbeat > self._sleep_gap_threshold_sec
+        self._last_heartbeat_at = now
+        return detected
 
     def _on_phase_timer_timeout(self) -> None:
         self._phase_warning_timer.stop()
@@ -103,9 +106,8 @@ class SleepRecoveryTimer(QtCore.QObject):
 
     def _on_heartbeat_timeout(self) -> None:
         now = QtCore.QDateTime.currentDateTime()
-        self._last_heartbeat_at = now
         if self.detect_sleep_gap(now):
-           self._recover_after_sleep(now)
+            self._recover_after_sleep(now)
 
     def _recover_after_sleep(self, now: QtCore.QDateTime) -> None:
         if self._ends_at is None:
