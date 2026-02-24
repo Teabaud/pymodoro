@@ -269,7 +269,7 @@ class DurationSelectionDialog(QDialog):
     def __init__(
         self,
         title: str,
-        default_minutes: int,
+        default_seconds: int,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -279,9 +279,9 @@ class DurationSelectionDialog(QDialog):
         layout = QVBoxLayout(self)
         form = QFormLayout()
         self._minutes_input = QSpinBox(self)
-        self._minutes_input.setRange(1, 720)
+        self._minutes_input.setMinimum(1)
         self._minutes_input.setSuffix(" min")
-        self._minutes_input.setValue(default_minutes)
+        self._minutes_input.setValue(max(1, round(default_seconds / 60)))
         form.addRow("Duration:", self._minutes_input)
         layout.addLayout(form)
 
@@ -292,14 +292,14 @@ class DurationSelectionDialog(QDialog):
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)
 
-    def selected_minutes(self) -> int:
-        return self._minutes_input.value()
+    def value(self) -> int:
+        return self._minutes_input.value() * 60
 
 
 class DurationInputWidget(QSpinBox):
     def __init__(self, value: int, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setRange(1, 7200)
+        self.setRange(1, 9999)
         self.setSuffix(" s")
         self.setValue(value)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)

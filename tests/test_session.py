@@ -7,8 +7,8 @@ from PySide6 import QtCore
 from PySide6.QtCore import QDateTime
 
 from pymodoro.session import (
-    LATE_FINISH_RESTART_THRESHOLD_MS,
-    PHASE_CHANGE_WARNING_MS,
+    LATE_FINISH_RESTART_THRESHOLD_SEC,
+    PHASE_CHANGE_WARNING_SEC,
     SessionPhase,
     SessionPhaseManager,
     SleepRecoveryTimer,
@@ -171,8 +171,8 @@ def test_sleep_recovery_timer_emits_missed_by_when_sleep_passes_deadline(
     now_box["current"] = fixed_now.addSecs(8 * 3600)
     timer._on_heartbeat_timeout()
 
-    assert completed == [28_680_000]
-    assert timer.remaining_ms() == -1
+    assert completed == [28_680]
+    assert timer.remaining_seconds() == -1
 
 
 def test_sleep_recovery_timer_resyncs_when_deadline_still_in_future(
@@ -198,9 +198,9 @@ def test_manager_reads_are_pure(monkeypatch: Any) -> None:
     sp_manager = SessionPhaseManager(settings=settings)
     fixed_end = QDateTime.fromString("2025-01-01 11:00", "yyyy-MM-dd HH:mm")
     monkeypatch.setattr(sp_manager._timer, "ends_at", lambda: fixed_end)
-    monkeypatch.setattr(sp_manager._timer, "remaining_ms", lambda: 42_000)
+    monkeypatch.setattr(sp_manager._timer, "remaining_seconds", lambda: 42)
 
-    assert sp_manager.remaining_ms() == 42_000
+    assert sp_manager.remaining_seconds() == 42
     assert sp_manager.ends_at() == fixed_end
 
 
@@ -211,7 +211,7 @@ def test_manager_transitions_on_late_finish_and_emits_work_end() -> None:
     sp_manager.workEnded.connect(lambda: work_ended.append(True))
 
     sp_manager.start_work_phase(seconds=1)
-    sp_manager._on_timer_finished(1234)
+    sp_manager._on_timer_finished(1)
 
     assert work_ended == [True]
     assert sp_manager.session_phase == SessionPhase.BREAK
@@ -224,18 +224,18 @@ def test_manager_restarts_fresh_session_when_finish_is_far_too_late() -> None:
     sp_manager.workEnded.connect(lambda: work_ended.append(True))
 
     sp_manager.start_work_phase(seconds=1)
-    sp_manager._on_timer_finished(LATE_FINISH_RESTART_THRESHOLD_MS + 1)
+    sp_manager._on_timer_finished(LATE_FINISH_RESTART_THRESHOLD_SEC + 1)
 
     assert work_ended == []
     assert sp_manager.session_phase == SessionPhase.WORK
     assert sp_manager._timer._phase_timer.interval() == 10_000
 
 
-def test_manager_time_left_str_uses_remaining_ms(monkeypatch: Any) -> None:
+def test_manager_time_left_str_uses_remaining_seconds(monkeypatch: Any) -> None:
     settings = _make_settings(work_duration=10, break_duration=5, snooze_duration=2)
     sp_manager = SessionPhaseManager(settings=settings)
     sp_manager.start_work_phase(seconds=10)
-    monkeypatch.setattr(sp_manager._timer, "remaining_ms", lambda: 5_000)
+    monkeypatch.setattr(sp_manager._timer, "remaining_seconds", lambda: 5)
 
     assert sp_manager.time_left_str() == "00:00:05"
 
@@ -260,7 +260,7 @@ def test_phase_ending_warning_fires_after_delay_for_long_phase() -> None:
     sp_manager.start_work_phase()
     assert (
         sp_manager._timer._phase_warning_timer.interval()
-        == 120_000 - PHASE_CHANGE_WARNING_MS
+        == 120_000 - PHASE_CHANGE_WARNING_SEC * 1000
     )
     sp_manager._timer._phase_warning_timer.timeout.emit()
 

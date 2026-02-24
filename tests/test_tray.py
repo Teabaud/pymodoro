@@ -79,18 +79,18 @@ class DummyTray:
 
 
 class DummySessionPhaseManager:
-    def __init__(self, phase: SessionPhase, remaining_ms: int) -> None:
+    def __init__(self, phase: SessionPhase, remaining_seconds: int) -> None:
         self.session_phase = phase
-        self._remaining_ms = remaining_ms
+        self._remaining_seconds = remaining_seconds
 
-    def remaining_ms(self) -> int:
-        return self._remaining_ms
+    def remaining_seconds(self) -> int:
+        return self._remaining_seconds
 
     def ends_at_str(self) -> str:
         return "12:00"
 
     def time_left_str(self) -> str:
-        return QtCore.QTime(0, 0).addMSecs(self._remaining_ms).toString("hh:mm:ss")
+        return QtCore.QTime(0, 0).addSecs(self._remaining_seconds).toString("hh:mm:ss")
 
 
 class DummySnackbar:
@@ -117,7 +117,7 @@ def test_refresh_updates_pause_tooltip_and_icon(
         lambda icon_path: f"icon-file:{icon_path}",
     )
 
-    sp_manager = DummySessionPhaseManager(SessionPhase.PAUSE, remaining_ms=3_600_000)
+    sp_manager = DummySessionPhaseManager(SessionPhase.PAUSE, remaining_seconds=3_600)
     tray = TrayController(
         app=cast(Any, SimpleNamespace()),
         session_phase_manager=cast(Any, sp_manager),
@@ -144,7 +144,7 @@ def test_refresh_updates_work_tooltip_and_icon(
         lambda icon_path: f"icon-file:{icon_path}",
     )
 
-    sp_manager = DummySessionPhaseManager(SessionPhase.WORK, remaining_ms=5_000)
+    sp_manager = DummySessionPhaseManager(SessionPhase.WORK, remaining_seconds=5)
     tray = TrayController(
         app=cast(Any, SimpleNamespace()),
         session_phase_manager=cast(Any, sp_manager),
@@ -170,7 +170,7 @@ def test_refresh_updates_break_tooltip_and_icon(
         lambda icon_path: f"icon-file:{icon_path}",
     )
 
-    sp_manager = DummySessionPhaseManager(SessionPhase.BREAK, remaining_ms=12_000)
+    sp_manager = DummySessionPhaseManager(SessionPhase.BREAK, remaining_seconds=12)
     tray = TrayController(
         app=cast(Any, SimpleNamespace()),
         session_phase_manager=cast(Any, sp_manager),
@@ -191,7 +191,7 @@ def test_pause_action_emits_resume_when_paused(
     monkeypatch.setattr(tray_module.QtWidgets, "QSystemTrayIcon", DummyTray)
     monkeypatch.setattr(tray_module.QtWidgets, "QMenu", DummyMenu)
 
-    sp_manager = DummySessionPhaseManager(SessionPhase.PAUSE, remaining_ms=0)
+    sp_manager = DummySessionPhaseManager(SessionPhase.PAUSE, remaining_seconds=0)
     tray = TrayController(
         app=cast(Any, SimpleNamespace()),
         session_phase_manager=cast(Any, sp_manager),
@@ -210,7 +210,7 @@ def test_pause_action_emits_datetime_when_working(
     monkeypatch.setattr(tray_module.QtWidgets, "QSystemTrayIcon", DummyTray)
     monkeypatch.setattr(tray_module.QtWidgets, "QMenu", DummyMenu)
 
-    sp_manager = DummySessionPhaseManager(SessionPhase.WORK, remaining_ms=0)
+    sp_manager = DummySessionPhaseManager(SessionPhase.WORK, remaining_seconds=0)
     tray = TrayController(
         app=cast(Any, SimpleNamespace()),
         session_phase_manager=cast(Any, sp_manager),
@@ -231,7 +231,7 @@ def test_tray_activation_requests_open_app(
     monkeypatch.setattr(tray_module.QtWidgets, "QSystemTrayIcon", DummyTray)
     monkeypatch.setattr(tray_module.QtWidgets, "QMenu", DummyMenu)
 
-    sp_manager = DummySessionPhaseManager(SessionPhase.WORK, remaining_ms=0)
+    sp_manager = DummySessionPhaseManager(SessionPhase.WORK, remaining_seconds=0)
     tray = TrayController(
         app=cast(Any, SimpleNamespace()),
         session_phase_manager=cast(Any, sp_manager),
@@ -250,7 +250,7 @@ def test_check_in_action_emits_request(
     monkeypatch.setattr(tray_module.QtWidgets, "QSystemTrayIcon", DummyTray)
     monkeypatch.setattr(tray_module.QtWidgets, "QMenu", DummyMenu)
 
-    sp_manager = DummySessionPhaseManager(SessionPhase.WORK, remaining_ms=0)
+    sp_manager = DummySessionPhaseManager(SessionPhase.WORK, remaining_seconds=0)
     tray = TrayController(
         app=cast(Any, SimpleNamespace()),
         session_phase_manager=cast(Any, sp_manager),
@@ -271,7 +271,7 @@ def test_show_phase_warning_toast_enables_snooze_action(
     monkeypatch.setattr(tray_module.QtWidgets, "QMenu", DummyMenu)
     monkeypatch.setattr(tray_module, "PhaseWarningToast", DummySnackbar)
 
-    sp_manager = DummySessionPhaseManager(SessionPhase.WORK, remaining_ms=0)
+    sp_manager = DummySessionPhaseManager(SessionPhase.WORK, remaining_seconds=0)
     tray = TrayController(
         app=cast(Any, SimpleNamespace()),
         session_phase_manager=cast(Any, sp_manager),
@@ -293,7 +293,7 @@ def test_hide_phase_warning_toast_hides_active_toast(
     monkeypatch.setattr(tray_module.QtWidgets, "QMenu", DummyMenu)
     monkeypatch.setattr(tray_module, "PhaseWarningToast", DummySnackbar)
 
-    sp_manager = DummySessionPhaseManager(SessionPhase.WORK, remaining_ms=0)
+    sp_manager = DummySessionPhaseManager(SessionPhase.WORK, remaining_seconds=0)
     tray = TrayController(
         app=cast(Any, SimpleNamespace()),
         session_phase_manager=cast(Any, sp_manager),

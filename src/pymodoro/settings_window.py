@@ -116,10 +116,10 @@ class SettingsWindow(QDialog):
             self.close()
 
     def _prompt_duration(self, title: str, default_seconds: int) -> int | None:
-        dialog = DurationSelectionDialog(title, default_seconds // 60, self)
+        dialog = DurationSelectionDialog(title, default_seconds, self)
         accepted_code = getattr(getattr(QDialog, "DialogCode", None), "Accepted", 1)
         if dialog.exec() == accepted_code:
-            return dialog.selected_minutes() * 60
+            return dialog.value()
 
     def _on_start_work_clicked(self) -> None:
         seconds = self._prompt_duration(

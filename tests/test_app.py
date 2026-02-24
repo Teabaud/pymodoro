@@ -55,8 +55,8 @@ class DummySessionPhaseManager:
     def start_break_phase(self, minutes: int) -> None:
         self.start_break_phase_called.append(minutes)
 
-    def remaining_ms(self) -> int:
-        return 45_000
+    def remaining_seconds(self) -> int:
+        return 45
 
 
 class DummyTrayController:
