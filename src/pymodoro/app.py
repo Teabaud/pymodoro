@@ -5,6 +5,7 @@ import random
 from loguru import logger
 
 from pymodoro.check_in_screen import CheckInScreen
+from pymodoro.notification_sound import NotificationSoundPlayer
 from pymodoro.session import (
     SessionPhase,
     SessionPhaseManager,
@@ -35,6 +36,7 @@ class PomodoroApp(QtCore.QObject):
 
         self._check_in_screen: CheckInScreen | None = None
         self._settings_window: SettingsWindow | None = None
+        self._notification_sound_player = NotificationSoundPlayer(self)
 
         self._sp_manager = SessionPhaseManager(settings=settings)
         self._tray_controller = TrayController(self._app, self._sp_manager)
@@ -80,9 +82,13 @@ class PomodoroApp(QtCore.QObject):
     def _on_settings_saved(self) -> None:
         self._tray_controller.refresh()
 
-    def _on_phase_changed(self, _: SessionPhase, current_phase: SessionPhase) -> None:
+    def _on_phase_changed(
+        self, previous_phase: SessionPhase, current_phase: SessionPhase
+    ) -> None:
         self._tray_controller.refresh()
         self._tray_controller.hide_phase_warning_toast()
+        if previous_phase == SessionPhase.PAUSE and current_phase == SessionPhase.WORK:
+            self._notification_sound_player.play()
         if self._settings_window and self._settings_window.isVisible():
             self._settings_window.set_paused(current_phase == SessionPhase.PAUSE)
 
@@ -114,6 +120,7 @@ class PomodoroApp(QtCore.QObject):
         self._tray_controller.show_phase_warning_toast(
             text=f"{phase.value} ending soon"
         )
+        self._notification_sound_player.play()
 
     def _on_snoozed_clicked(self) -> None:
         self._sp_manager.extend_current_phase()

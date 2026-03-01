@@ -150,6 +150,14 @@ class DummySettingsWindow:
         self.paused_states.append(paused)
 
 
+class DummyNotificationSoundPlayer:
+    def __init__(self, *_: Any, **__: Any) -> None:
+        self.play_calls = 0
+
+    def play(self) -> None:
+        self.play_calls += 1
+
+
 @pytest.fixture
 def settings(tmp_path: Any) -> AppSettings:
     return AppSettings(
@@ -260,6 +268,12 @@ def test_work_phase_ending_warning_allows_tray_snooze(
     monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
     monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
     monkeypatch.setattr(app_module, "CheckInScreen", DummyPrompt)
+    sound_player = DummyNotificationSoundPlayer()
+    monkeypatch.setattr(
+        app_module,
+        "NotificationSoundPlayer",
+        lambda *args, **kwargs: sound_player,
+    )
 
     app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
     phase_manager = cast(DummySessionPhaseManager, app._sp_manager)
@@ -272,6 +286,7 @@ def test_work_phase_ending_warning_allows_tray_snooze(
             "text": "Work ending soon",
         }
     ]
+    assert sound_player.play_calls == 1
     tray_controller.snoozeRequested.emit()
     assert phase_manager.extend_current_phase_called == 1
     assert phase_manager.extend_current_phase_seconds is None
@@ -283,6 +298,12 @@ def test_non_work_phase_warning_does_not_show_message(
     monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
     monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
     monkeypatch.setattr(app_module, "CheckInScreen", DummyPrompt)
+    sound_player = DummyNotificationSoundPlayer()
+    monkeypatch.setattr(
+        app_module,
+        "NotificationSoundPlayer",
+        lambda *args, **kwargs: sound_player,
+    )
 
     app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
     phase_manager = cast(DummySessionPhaseManager, app._sp_manager)
@@ -291,6 +312,7 @@ def test_non_work_phase_warning_does_not_show_message(
     phase_manager.phaseEndingSoon.emit(SessionPhase.BREAK)
 
     assert tray_controller.toast_messages == []
+    assert sound_player.play_calls == 0
 
 
 def test_phase_change_hides_warning_toast_on_phase_change(
@@ -299,6 +321,12 @@ def test_phase_change_hides_warning_toast_on_phase_change(
     monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
     monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
     monkeypatch.setattr(app_module, "CheckInScreen", DummyPrompt)
+    sound_player = DummyNotificationSoundPlayer()
+    monkeypatch.setattr(
+        app_module,
+        "NotificationSoundPlayer",
+        lambda *args, **kwargs: sound_player,
+    )
 
     app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
     tray_controller = cast(DummyTrayController, app._tray_controller)
@@ -306,6 +334,27 @@ def test_phase_change_hides_warning_toast_on_phase_change(
     app._sp_manager.phaseChanged.emit(SessionPhase.WORK, SessionPhase.BREAK)
 
     assert tray_controller.hide_phase_warning_toast_called == 1
+    assert sound_player.play_calls == 0
+
+
+def test_pause_to_work_phase_change_plays_sound(
+    monkeypatch: Any, settings: AppSettings
+) -> None:
+    monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
+    monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
+    monkeypatch.setattr(app_module, "CheckInScreen", DummyPrompt)
+    sound_player = DummyNotificationSoundPlayer()
+    monkeypatch.setattr(
+        app_module,
+        "NotificationSoundPlayer",
+        lambda *args, **kwargs: sound_player,
+    )
+
+    app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
+
+    app._sp_manager.phaseChanged.emit(SessionPhase.PAUSE, SessionPhase.WORK)
+
+    assert sound_player.play_calls == 1
 
 
 def test_note_submit_closes_prompt(monkeypatch: Any, settings: AppSettings) -> None:
@@ -380,6 +429,11 @@ def test_phase_change_updates_open_settings_paused_state(
     monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
     monkeypatch.setattr(app_module, "CheckInScreen", DummyPrompt)
     monkeypatch.setattr(app_module, "SettingsWindow", DummySettingsWindow)
+    monkeypatch.setattr(
+        app_module,
+        "NotificationSoundPlayer",
+        DummyNotificationSoundPlayer,
+    )
 
     app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
     app._open_settings_window()
