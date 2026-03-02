@@ -3,8 +3,6 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-DEFAULT_METRICS_LOG_PATH = Path(__file__).resolve().parents[2] / "metrics.jsonl"
-
 
 @dataclass(slots=True)
 class CheckInSubmission:
@@ -16,7 +14,7 @@ class CheckInSubmission:
 
 
 class MetricsLogger:
-    def __init__(self, log_path: Path = DEFAULT_METRICS_LOG_PATH) -> None:
+    def __init__(self, log_path: Path) -> None:
         self._log_path = Path(log_path)
         self._ensure_log_file_exists()
 

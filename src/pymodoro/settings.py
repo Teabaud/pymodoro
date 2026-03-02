@@ -19,7 +19,9 @@ check_in:
     - "What is your goal for the day?"
 """
 
-DEFAULT_SETTINGS_PATH = Path(__file__).resolve().parents[2] / "settings.yaml"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_SETTINGS_PATH = PROJECT_ROOT / "settings.yaml"
+DEFAULT_METRICS_LOG_PATH = PROJECT_ROOT / "metrics.jsonl"
 
 
 class TimersSettings(BaseModel):
@@ -36,6 +38,7 @@ class AppSettings(BaseModel):
     timers: TimersSettings
     check_in: CheckInSettings
     settings_path: Path
+    metrics_log_path: Path = DEFAULT_METRICS_LOG_PATH
 
 
 def _get_or_create_settings_file(
@@ -57,7 +60,9 @@ def load_settings(
 
 def save_settings(settings: AppSettings) -> None:
     logger.info("Saving settings to: {}", settings.settings_path)
-    data = settings.model_dump(exclude={"settings_path"}, exclude_none=True)
+    data = settings.model_dump(
+        mode="json", exclude={"settings_path"}, exclude_none=True
+    )
     settings.settings_path.write_text(
         yaml.dump(data, default_flow_style=False, allow_unicode=True),
         encoding="utf-8",

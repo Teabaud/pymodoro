@@ -34,7 +34,7 @@ class PomodoroApp(QtCore.QObject):
         super().__init__()
         self._app = app or _get_qt_app()
         self._settings = settings
-        self._metrics_logger = MetricsLogger()
+        self._metrics_logger = MetricsLogger(self._settings.metrics_log_path)
 
         self._check_in_screen: CheckInScreen | None = None
         self._settings_window: SettingsWindow | None = None

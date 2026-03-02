@@ -100,7 +100,8 @@ class SleepRecoveryTimer(QtCore.QObject):
         return wall_clock - self._accumulated_sleep_seconds
 
     def remaining_seconds(self) -> int:
-        return round(self._phase_timer.remainingTime() / 1000)
+        remaining_ms = self._phase_timer.remainingTime()
+        return round(remaining_ms / 1000) if remaining_ms >= 0 else -1
 
     def ends_at(self) -> QtCore.QDateTime | None:
         return self._ends_at

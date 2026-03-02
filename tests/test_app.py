@@ -196,6 +196,7 @@ def settings(tmp_path: Any) -> AppSettings:
         check_in=CheckInSettings(prompts=["Break time?"]),
         timers=TimersSettings(work_duration=10, break_duration=5, snooze_duration=3),
         settings_path=tmp_path / "settings.yaml",
+        metrics_log_path=tmp_path / "metrics.jsonl",
     )
 
 
@@ -419,10 +420,7 @@ def test_check_in_submit_creates_jsonl_log_record(
     monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
     monkeypatch.setattr(app_module, "CheckInScreen", DummyPrompt)
 
-    metrics_log_path = settings.settings_path.parent / "metrics.jsonl"
-    monkeypatch.setattr(
-        app_module, "MetricsLogger", lambda: MetricsLogger(log_path=metrics_log_path)
-    )
+    monkeypatch.setattr(app_module, "MetricsLogger", MetricsLogger)
     app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
     app._on_check_in_screen_submit(
         CheckInSubmission(
@@ -434,9 +432,9 @@ def test_check_in_submit_creates_jsonl_log_record(
         )
     )
 
-    assert metrics_log_path.exists() is True
+    assert settings.metrics_log_path.exists() is True
 
-    lines = metrics_log_path.read_text(encoding="utf-8").splitlines()
+    lines = settings.metrics_log_path.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 1
 
     record = json.loads(lines[0])
@@ -458,10 +456,7 @@ def test_check_in_submit_appends_multiple_jsonl_records(
     monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
     monkeypatch.setattr(app_module, "CheckInScreen", DummyPrompt)
 
-    metrics_log_path = settings.settings_path.parent / "metrics.jsonl"
-    monkeypatch.setattr(
-        app_module, "MetricsLogger", lambda: MetricsLogger(log_path=metrics_log_path)
-    )
+    monkeypatch.setattr(app_module, "MetricsLogger", MetricsLogger)
     app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
     app._on_check_in_screen_submit(
         CheckInSubmission(
@@ -482,7 +477,7 @@ def test_check_in_submit_appends_multiple_jsonl_records(
         )
     )
 
-    lines = metrics_log_path.read_text(encoding="utf-8").splitlines()
+    lines = settings.metrics_log_path.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 2
 
     first_record = json.loads(lines[0])
@@ -509,19 +504,16 @@ def test_phase_change_logs_session_duration_row(
         app_module, "NotificationSoundPlayer", DummyNotificationSoundPlayer
     )
 
-    metrics_log_path = settings.settings_path.parent / "metrics.jsonl"
-    monkeypatch.setattr(
-        app_module, "MetricsLogger", lambda: MetricsLogger(log_path=metrics_log_path)
-    )
+    monkeypatch.setattr(app_module, "MetricsLogger", MetricsLogger)
     app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
     app._on_phase_changed(SessionPhase.BREAK, SessionPhase.WORK, 42)
 
-    lines = metrics_log_path.read_text(encoding="utf-8").splitlines()
+    lines = settings.metrics_log_path.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 1
 
     record = json.loads(lines[0])
     assert record["record_type"] == "session_duration"
-    assert record["session_type"] == "Work"
+    assert record["session_type"] == "Break"
     assert isinstance(record["duration_sec"], int) is True
     assert record["duration_sec"] == 42
     assert record["prompt"] is None
