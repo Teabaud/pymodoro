@@ -10,8 +10,9 @@ from pymodoro.settings import (
     save_settings,
 )
 from pymodoro.settings_window_widgets import (
-    CheckInPromptsSectionWidget,
     DurationSelectionDialog,
+    NotificationsSectionWidget,
+    PromptsSectionWidget,
     SessionSectionWidget,
     TimersSectionWidget,
 )
@@ -26,6 +27,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+StandardButton = QDialogButtonBox.StandardButton
+
 
 @dataclass
 class SettingsDraft:
@@ -33,6 +36,7 @@ class SettingsDraft:
     break_duration: int
     snooze_duration: int
     check_in_prompts: list[str]
+    notification_sound_enabled: bool
 
     @classmethod
     def from_settings(cls, settings: AppSettings) -> SettingsDraft:
@@ -41,6 +45,7 @@ class SettingsDraft:
             break_duration=settings.timers.break_duration,
             snooze_duration=settings.timers.snooze_duration,
             check_in_prompts=list(settings.check_in.prompts),
+            notification_sound_enabled=settings.notification_sound_enabled,
         )
 
 
@@ -64,7 +69,7 @@ class SettingsWindow(QDialog):
 
         self.setWindowTitle("Pymodoro Settings")
         self.setMinimumSize(480, 400)
-        self.resize(480, 450)
+        self.resize(480, 500)
 
         self._session_group = SessionSectionWidget()
         self._timers_group = TimersSectionWidget(
@@ -72,27 +77,29 @@ class SettingsWindow(QDialog):
             break_duration=self._draft.break_duration,
             snooze_duration=self._draft.snooze_duration,
         )
-        self._check_in_prompts_section_widget: CheckInPromptsSectionWidget = (
-            CheckInPromptsSectionWidget(check_in_prompts=self._draft.check_in_prompts)
+        self._prompts_group = PromptsSectionWidget(
+            check_in_prompts=self._draft.check_in_prompts
+        )
+        self._notifications_group = NotificationsSectionWidget(
+            notification_sound_enabled=self._draft.notification_sound_enabled
         )
 
         self._session_group.pauseResumeClicked.connect(self._on_pause_resume_clicked)
         self._session_group.startWorkClicked.connect(self._on_start_work_clicked)
         self._session_group.startBreakClicked.connect(self._on_start_break_clicked)
         self._timers_group.changed.connect(self._mark_dirty)
-        self._check_in_prompts_section_widget.changed.connect(self._mark_dirty)
+        self._prompts_group.changed.connect(self._mark_dirty)
+        self._notifications_group.changed.connect(self._mark_dirty)
 
-        self._button_box = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Save
-            | QDialogButtonBox.StandardButton.Cancel
-        )
+        self._button_box = QDialogButtonBox(StandardButton.Save | StandardButton.Cancel)
         self._button_box.accepted.connect(self._on_save)
         self._button_box.rejected.connect(self._on_cancel)
 
         layout = QVBoxLayout(self)
         layout.addWidget(self._session_group)
         layout.addWidget(self._timers_group)
-        layout.addWidget(self._check_in_prompts_section_widget)
+        layout.addWidget(self._notifications_group)
+        layout.addWidget(self._prompts_group)
         layout.addWidget(self._button_box)
 
     def set_paused(self, paused: bool) -> None:
@@ -151,15 +158,16 @@ class SettingsWindow(QDialog):
     def _try_save(self) -> bool:
         try:
             timers = self._timers_group.to_timers_settings()
-            check_in_prompts = (
-                self._check_in_prompts_section_widget.prompts_editor.get_prompts()
-            )
+            check_in_prompts = self._prompts_group.prompts_editor.get_prompts()
         except ValidationError as error:
             self._show_validation_error(error)
             return False
 
+        sound_enabled = self._notifications_group.is_sound_enabled()
+
         self._settings.timers = timers
         self._settings.check_in.prompts = check_in_prompts
+        self._settings.notification_sound_enabled = sound_enabled
         save_settings(self._settings)
         self._dirty = False
         self.settingsSaved.emit()

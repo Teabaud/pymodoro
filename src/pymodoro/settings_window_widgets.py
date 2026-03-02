@@ -5,6 +5,7 @@ from pymodoro.settings import TimersSettings
 # isort: split
 from PySide6 import QtCore
 from PySide6.QtWidgets import (
+    QCheckBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -342,7 +343,7 @@ class TimersSectionWidget(QGroupBox):
         self.changed.emit()
 
 
-class CheckInPromptsSectionWidget(QGroupBox):
+class PromptsSectionWidget(QGroupBox):
     changed = QtCore.Signal()
 
     def __init__(
@@ -368,3 +369,20 @@ class CheckInPromptsSectionWidget(QGroupBox):
 
         layout.addWidget(self.prompts_editor)
         layout.addWidget(self.add_prompt_button)
+
+
+class NotificationsSectionWidget(QGroupBox):
+    changed = QtCore.Signal()
+
+    def __init__(
+        self, notification_sound_enabled: bool, parent: QWidget | None = None
+    ) -> None:
+        super().__init__("Notifications", parent)
+        layout = QVBoxLayout(self)
+        self._sound_checkbox = QCheckBox("Enable notification sound")
+        self._sound_checkbox.setChecked(notification_sound_enabled)
+        self._sound_checkbox.checkStateChanged.connect(lambda _: self.changed.emit())
+        layout.addWidget(self._sound_checkbox)
+
+    def is_sound_enabled(self) -> bool:
+        return self._sound_checkbox.isChecked()

@@ -12,6 +12,8 @@ DEFAULT_SETTINGS_YAML = """timers:
   break_duration: 300  # seconds (5 minutes)
   snooze_duration: 60  # seconds (1 minute)
 
+notification_sound_enabled: true
+
 check_in:
   prompts:
     - "How present are you in what you do?"
@@ -39,6 +41,7 @@ class AppSettings(BaseModel):
     check_in: CheckInSettings
     settings_path: Path
     metrics_log_path: Path = DEFAULT_METRICS_LOG_PATH
+    notification_sound_enabled: bool = True
 
 
 def _get_or_create_settings_file(
