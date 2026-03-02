@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 import random
 from typing import Any, Callable, cast
 
 import pytest
 
 import pymodoro.app as app_module
+from pymodoro.metrics_logger import CheckInSubmission, MetricsLogger
 from pymodoro.session import SessionPhase
 from pymodoro.settings import AppSettings, CheckInSettings, TimersSettings
 
@@ -156,6 +158,36 @@ class DummyNotificationSoundPlayer:
 
     def play(self) -> None:
         self.play_calls += 1
+
+
+class DummyMetricsLogger:
+    def __init__(self, *_: Any, **__: Any) -> None:
+        self.check_in_events: list[dict[str, Any]] = []
+        self.session_duration_events: list[dict[str, Any]] = []
+
+    def log_check_in(self, submission: CheckInSubmission) -> None:
+        self.check_in_events.append(
+            {
+                "prompt": submission.prompt,
+                "answer": submission.answer,
+                "focus_rating": submission.focus_rating,
+                "exercise_name": submission.exercise_name,
+                "exercise_rep_count": submission.exercise_rep_count,
+            }
+        )
+
+    def log_phase_duration(self, session_type: str, duration_sec: int) -> None:
+        self.session_duration_events.append(
+            {
+                "session_type": session_type,
+                "duration_sec": duration_sec,
+            }
+        )
+
+
+@pytest.fixture(autouse=True)
+def patch_metrics_logger(monkeypatch: Any) -> None:
+    monkeypatch.setattr(app_module, "MetricsLogger", DummyMetricsLogger)
 
 
 @pytest.fixture
@@ -331,7 +363,7 @@ def test_phase_change_hides_warning_toast_on_phase_change(
     app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
     tray_controller = cast(DummyTrayController, app._tray_controller)
 
-    app._sp_manager.phaseChanged.emit(SessionPhase.WORK, SessionPhase.BREAK)
+    app._sp_manager.phaseChanged.emit(SessionPhase.WORK, SessionPhase.BREAK, 120)
 
     assert tray_controller.hide_phase_warning_toast_called == 1
     assert sound_player.play_calls == 0
@@ -352,7 +384,7 @@ def test_pause_to_work_phase_change_plays_sound(
 
     app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
 
-    app._sp_manager.phaseChanged.emit(SessionPhase.PAUSE, SessionPhase.WORK)
+    app._sp_manager.phaseChanged.emit(SessionPhase.PAUSE, SessionPhase.WORK, 120)
 
     assert sound_player.play_calls == 1
 
@@ -367,9 +399,136 @@ def test_note_submit_closes_prompt(monkeypatch: Any, settings: AppSettings) -> N
     app_any = cast(Any, app)
     app_any._check_in_screen = prompt
 
-    app._on_check_in_screen_submit("done", None, None)
+    app._on_check_in_screen_submit(
+        CheckInSubmission(
+            prompt="Break time?",
+            answer="done",
+            focus_rating=None,
+            exercise_name=None,
+            exercise_rep_count=None,
+        )
+    )
 
     assert prompt.closed is True
+
+
+def test_check_in_submit_creates_jsonl_log_record(
+    monkeypatch: Any, settings: AppSettings
+) -> None:
+    monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
+    monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
+    monkeypatch.setattr(app_module, "CheckInScreen", DummyPrompt)
+
+    metrics_log_path = settings.settings_path.parent / "metrics.jsonl"
+    monkeypatch.setattr(
+        app_module, "MetricsLogger", lambda: MetricsLogger(log_path=metrics_log_path)
+    )
+    app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
+    app._on_check_in_screen_submit(
+        CheckInSubmission(
+            prompt="Break time?",
+            answer="done",
+            focus_rating=None,
+            exercise_name=None,
+            exercise_rep_count=None,
+        )
+    )
+
+    assert metrics_log_path.exists() is True
+
+    lines = metrics_log_path.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1
+
+    record = json.loads(lines[0])
+    assert record["record_type"] == "check_in"
+    assert record["prompt"] == "Break time?"
+    assert record["answer"] == "done"
+    assert record["focus_rating"] is None
+    assert record["exercise_name"] is None
+    assert record["exercise_rep_count"] is None
+    assert record["session_type"] is None
+    assert record["duration_sec"] is None
+    assert record["timestamp_iso"].endswith("Z")
+
+
+def test_check_in_submit_appends_multiple_jsonl_records(
+    monkeypatch: Any, settings: AppSettings
+) -> None:
+    monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
+    monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
+    monkeypatch.setattr(app_module, "CheckInScreen", DummyPrompt)
+
+    metrics_log_path = settings.settings_path.parent / "metrics.jsonl"
+    monkeypatch.setattr(
+        app_module, "MetricsLogger", lambda: MetricsLogger(log_path=metrics_log_path)
+    )
+    app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
+    app._on_check_in_screen_submit(
+        CheckInSubmission(
+            prompt="Break time?",
+            answer="first",
+            focus_rating=4,
+            exercise_name="squats",
+            exercise_rep_count=12,
+        )
+    )
+    app._on_check_in_screen_submit(
+        CheckInSubmission(
+            prompt="Break time?",
+            answer="second",
+            focus_rating=None,
+            exercise_name=None,
+            exercise_rep_count=None,
+        )
+    )
+
+    lines = metrics_log_path.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 2
+
+    first_record = json.loads(lines[0])
+    second_record = json.loads(lines[1])
+    assert first_record["record_type"] == "check_in"
+    assert first_record["answer"] == "first"
+    assert first_record["focus_rating"] == 4
+    assert first_record["exercise_name"] == "squats"
+    assert first_record["exercise_rep_count"] == 12
+    assert second_record["record_type"] == "check_in"
+    assert second_record["answer"] == "second"
+    assert second_record["focus_rating"] is None
+    assert second_record["exercise_name"] is None
+    assert second_record["exercise_rep_count"] is None
+
+
+def test_phase_change_logs_session_duration_row(
+    monkeypatch: Any, settings: AppSettings
+) -> None:
+    monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
+    monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
+    monkeypatch.setattr(app_module, "CheckInScreen", DummyPrompt)
+    monkeypatch.setattr(
+        app_module, "NotificationSoundPlayer", DummyNotificationSoundPlayer
+    )
+
+    metrics_log_path = settings.settings_path.parent / "metrics.jsonl"
+    monkeypatch.setattr(
+        app_module, "MetricsLogger", lambda: MetricsLogger(log_path=metrics_log_path)
+    )
+    app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
+    app._on_phase_changed(SessionPhase.BREAK, SessionPhase.WORK, 42)
+
+    lines = metrics_log_path.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1
+
+    record = json.loads(lines[0])
+    assert record["record_type"] == "session_duration"
+    assert record["session_type"] == "Work"
+    assert isinstance(record["duration_sec"], int) is True
+    assert record["duration_sec"] == 42
+    assert record["prompt"] is None
+    assert record["answer"] is None
+    assert record["focus_rating"] is None
+    assert record["exercise_name"] is None
+    assert record["exercise_rep_count"] is None
 
 
 def test_check_in_prompt_selection_not_constant(
@@ -439,7 +598,7 @@ def test_phase_change_updates_open_settings_paused_state(
     app._open_settings_window()
     settings_window = cast(DummySettingsWindow, app._settings_window)
 
-    app._sp_manager.phaseChanged.emit(SessionPhase.WORK, SessionPhase.PAUSE)
-    app._sp_manager.phaseChanged.emit(SessionPhase.PAUSE, SessionPhase.WORK)
+    app._sp_manager.phaseChanged.emit(SessionPhase.WORK, SessionPhase.PAUSE, 300)
+    app._sp_manager.phaseChanged.emit(SessionPhase.PAUSE, SessionPhase.WORK, 60)
 
     assert settings_window.paused_states == [False, True, False]

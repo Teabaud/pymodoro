@@ -40,6 +40,11 @@ class PromptCard(QWidget):
     def set_check_in_prompt(self, text: str) -> None:
         self._check_in_prompt.setText(text)
 
+    @property
+    def prompt(self) -> str:
+        return self._check_in_prompt.text()
+
+    @property
     def answer(self) -> str:
         return self._input.toPlainText().strip()
 

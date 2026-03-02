@@ -5,6 +5,7 @@ import random
 from loguru import logger
 
 from pymodoro.check_in_screen import CheckInScreen
+from pymodoro.metrics_logger import CheckInSubmission, MetricsLogger
 from pymodoro.notification_sound import NotificationSoundPlayer
 from pymodoro.session import (
     SessionPhase,
@@ -33,6 +34,7 @@ class PomodoroApp(QtCore.QObject):
         super().__init__()
         self._app = app or _get_qt_app()
         self._settings = settings
+        self._metrics_logger = MetricsLogger()
 
         self._check_in_screen: CheckInScreen | None = None
         self._settings_window: SettingsWindow | None = None
@@ -83,7 +85,10 @@ class PomodoroApp(QtCore.QObject):
         self._tray_controller.refresh()
 
     def _on_phase_changed(
-        self, previous_phase: SessionPhase, current_phase: SessionPhase
+        self,
+        previous_phase: SessionPhase,
+        current_phase: SessionPhase,
+        previous_phase_duration: int,
     ) -> None:
         self._tray_controller.refresh()
         self._tray_controller.hide_phase_warning_toast()
@@ -91,6 +96,7 @@ class PomodoroApp(QtCore.QObject):
             self._notification_sound_player.play()
         if self._settings_window and self._settings_window.isVisible():
             self._settings_window.set_paused(current_phase == SessionPhase.PAUSE)
+        self._metrics_logger.log_phase_duration(previous_phase, previous_phase_duration)
 
     def _show_check_in_window(self) -> None:
         if self._check_in_screen and self._check_in_screen.isVisible():
@@ -103,14 +109,14 @@ class PomodoroApp(QtCore.QObject):
             self._check_in_screen.set_check_in_prompt(check_in_prompt)
         self._check_in_screen.show()
 
-    def _on_check_in_screen_submit(
-        self,
-        answer: str,
-        focus_rating: int | None,
-        exercise_result: tuple[str, int] | None,
-    ) -> None:
+    def _on_check_in_screen_submit(self, submission: CheckInSubmission) -> None:
+        self._metrics_logger.log_check_in(submission)
         logger.info(
-            f"Answer: {answer} | focus_rating: {focus_rating} | exercise_result: {exercise_result}"
+            "Answer: {} | focus_rating: {} | exercise_result: ({}, {})",
+            submission.answer,
+            submission.focus_rating,
+            submission.exercise_name,
+            submission.exercise_rep_count,
         )
         self._close_check_in_window()
 

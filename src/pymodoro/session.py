@@ -48,13 +48,17 @@ class SleepRecoveryTimer(QtCore.QObject):
         self._phase_warning_timer.timeout.connect(self.phaseEndingSoon.emit)
 
         self._ends_at: QtCore.QDateTime | None = None
+        self._started_at: QtCore.QDateTime | None = None
         self._last_heartbeat_at: QtCore.QDateTime | None = None
+        self._accumulated_sleep_seconds: int = 0
 
     def start(self, seconds: int) -> None:
         duration_seconds = max(0, seconds)
         now = QtCore.QDateTime.currentDateTime()
         self._ends_at = now.addSecs(duration_seconds)
+        self._started_at = now
         self._last_heartbeat_at = now
+        self._accumulated_sleep_seconds = 0
 
         self._phase_timer.stop()
         self._phase_timer.setInterval(duration_seconds * 1000)
@@ -69,7 +73,9 @@ class SleepRecoveryTimer(QtCore.QObject):
         self._heartbeat_timer.stop()
         self._phase_warning_timer.stop()
         self._ends_at = None
+        self._started_at = None
         self._last_heartbeat_at = None
+        self._accumulated_sleep_seconds = 0
 
     def extend(self, seconds: int) -> None:
         if self._ends_at is None:
@@ -77,7 +83,7 @@ class SleepRecoveryTimer(QtCore.QObject):
 
         now = QtCore.QDateTime.currentDateTime()
         self._ends_at = self._ends_at.addSecs(seconds)
-        remaining_seconds = max(0, now.secsTo(self._ends_at))
+        remaining_seconds = round(now.msecsTo(self._ends_at) / 1000)
         self._phase_timer.stop()
         self._phase_timer.setInterval(remaining_seconds * 1000)
         self._phase_timer.start()
@@ -86,19 +92,28 @@ class SleepRecoveryTimer(QtCore.QObject):
         if not self._heartbeat_timer.isActive():
             self._heartbeat_timer.start()
 
+    def elapsed_seconds(self) -> int:
+        if self._started_at is None:
+            return 0
+        now = QtCore.QDateTime.currentDateTime()
+        wall_clock = round(self._started_at.msecsTo(now) / 1000)
+        return wall_clock - self._accumulated_sleep_seconds
+
     def remaining_seconds(self) -> int:
-        return self._phase_timer.remainingTime() // 1000
+        return round(self._phase_timer.remainingTime() / 1000)
 
     def ends_at(self) -> QtCore.QDateTime | None:
         return self._ends_at
 
-    def detect_sleep_gap(self, now: QtCore.QDateTime) -> bool:
-        detected = False
+    def _detect_sleep_gap(self, now: QtCore.QDateTime) -> int:
+        """Returns the sleep gap in seconds, or 0 if no gap was detected."""
+        gap_seconds = 0
         if self._last_heartbeat_at is not None:
-            secs_to_last_heartbeat = self._last_heartbeat_at.secsTo(now)
-            detected = secs_to_last_heartbeat > self._sleep_gap_threshold_sec
+            elapsed = self._last_heartbeat_at.secsTo(now)
+            if elapsed > self._sleep_gap_threshold_sec:
+                gap_seconds = elapsed
         self._last_heartbeat_at = now
-        return detected
+        return gap_seconds
 
     def _on_phase_timer_timeout(self) -> None:
         self._phase_warning_timer.stop()
@@ -106,7 +121,9 @@ class SleepRecoveryTimer(QtCore.QObject):
 
     def _on_heartbeat_timeout(self) -> None:
         now = QtCore.QDateTime.currentDateTime()
-        if self.detect_sleep_gap(now):
+        gap_seconds = self._detect_sleep_gap(now)
+        if gap_seconds:
+            self._accumulated_sleep_seconds += gap_seconds
             self._recover_after_sleep(now)
 
     def _recover_after_sleep(self, now: QtCore.QDateTime) -> None:
@@ -139,7 +156,7 @@ class SleepRecoveryTimer(QtCore.QObject):
 
 
 class SessionPhaseManager(QtCore.QObject):
-    phaseChanged = QtCore.Signal(SessionPhase, SessionPhase)
+    phaseChanged = QtCore.Signal(SessionPhase, SessionPhase, int)
     phaseEndingSoon = QtCore.Signal(SessionPhase)
     workEnded = QtCore.Signal()
 
@@ -198,8 +215,9 @@ class SessionPhaseManager(QtCore.QObject):
 
     def _start_phase(self, phase: SessionPhase, seconds: int) -> None:
         previous_phase = self._phase
+        previous_phase_duration = self._timer.elapsed_seconds()
         self._phase = phase
-        self.phaseChanged.emit(previous_phase, phase)
+        self.phaseChanged.emit(previous_phase, phase, previous_phase_duration)
         self._timer.start(seconds)
         logger.info(str(self))
 

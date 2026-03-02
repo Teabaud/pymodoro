@@ -7,6 +7,7 @@ from pymodoro.check_in_screen_widgets import (
     FocusRatingWidget,
     PromptCard,
 )
+from pymodoro.metrics_logger import CheckInSubmission
 
 STYLESHEET = """
 QLabel {
@@ -36,7 +37,7 @@ SUBMIT_SHORTCUTS = [
 
 
 class CheckInScreen(QtWidgets.QDialog):
-    submitted = QtCore.Signal(str, object, object)
+    submitted = QtCore.Signal(object)
 
     def __init__(
         self,
@@ -114,10 +115,14 @@ class CheckInScreen(QtWidgets.QDialog):
             event.ignore()
 
     def _on_submit(self) -> None:
-        prompt_answer = self._prompt_card.answer()
-        focus_rating = self._focus_rating_widget.rating
-        exercise_result = self._exercise_widget.exercise_result
-        if prompt_answer == "":
+        if self._prompt_card.answer == "":
             return
+        submission = CheckInSubmission(
+            prompt=self._prompt_card.prompt,
+            answer=self._prompt_card.answer,
+            focus_rating=self._focus_rating_widget.rating,
+            exercise_name=self._exercise_widget.exercise_name,
+            exercise_rep_count=self._exercise_widget.rep_count,
+        )
         self._answered = True
-        self.submitted.emit(prompt_answer, focus_rating, exercise_result)
+        self.submitted.emit(submission)

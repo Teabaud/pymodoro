@@ -297,6 +297,81 @@ def test_phase_ending_warning_fires_immediately_for_short_phase() -> None:
     assert warnings == [SessionPhase.WORK]
 
 
+def test_phase_changed_emits_previous_phase_duration(monkeypatch: Any) -> None:
+    settings = _make_settings(work_duration=10, break_duration=5, snooze_duration=2)
+    sp_manager = SessionPhaseManager(settings=settings)
+    fixed_now = QDateTime.fromString("2025-01-01 10:00", "yyyy-MM-dd HH:mm")
+    now_box = {"current": fixed_now}
+    monkeypatch.setattr(QDateTime, "currentDateTime", lambda: now_box["current"])
+    changes: list[tuple[SessionPhase, SessionPhase, int]] = []
+    sp_manager.phaseChanged.connect(
+        lambda prev, curr, dur: changes.append((prev, curr, dur))
+    )
+
+    sp_manager.start_work_phase(seconds=100)
+    now_box["current"] = fixed_now.addSecs(42)
+    sp_manager.start_break_phase(seconds=100)
+
+    assert changes[-1] == (SessionPhase.WORK, SessionPhase.BREAK, 42)
+
+
+def test_phase_changed_duration_excludes_sleep_time(monkeypatch: Any) -> None:
+    settings = _make_settings(work_duration=900, break_duration=5, snooze_duration=2)
+    sp_manager = SessionPhaseManager(settings=settings)
+    fixed_now = QDateTime.fromString("2025-01-01 10:00", "yyyy-MM-dd HH:mm")
+    now_box = {"current": fixed_now}
+    monkeypatch.setattr(QDateTime, "currentDateTime", lambda: now_box["current"])
+    changes: list[tuple[SessionPhase, SessionPhase, int]] = []
+    sp_manager.phaseChanged.connect(
+        lambda prev, curr, dur: changes.append((prev, curr, dur))
+    )
+
+    sp_manager.start_work_phase(seconds=900)
+    now_box["current"] = fixed_now.addSecs(45)
+    sp_manager._timer._on_heartbeat_timeout()  # 45s sleep gap detected
+    now_box["current"] = fixed_now.addSecs(900)
+    sp_manager.start_break_phase(seconds=100)
+
+    assert changes[-1] == (SessionPhase.WORK, SessionPhase.BREAK, 900 - 45)
+
+
+def test_elapsed_seconds_excludes_sleep_gaps(monkeypatch: Any) -> None:
+    timer = SleepRecoveryTimer()
+    fixed_now = QDateTime.fromString("2025-01-01 10:00", "yyyy-MM-dd HH:mm")
+    now_box = {"current": fixed_now}
+    monkeypatch.setattr(QDateTime, "currentDateTime", lambda: now_box["current"])
+
+    timer.start(900)
+    now_box["current"] = fixed_now.addSecs(45)
+    timer._on_heartbeat_timeout()  # sleep gap of 45s detected
+    now_box["current"] = fixed_now.addSecs(200)
+
+    assert timer.elapsed_seconds() == 200 - 45
+
+
+def test_elapsed_seconds_returns_zero_before_start() -> None:
+    timer = SleepRecoveryTimer()
+
+    assert timer.elapsed_seconds() == 0
+
+
+def test_elapsed_seconds_resets_on_new_start(monkeypatch: Any) -> None:
+    timer = SleepRecoveryTimer()
+    fixed_now = QDateTime.fromString("2025-01-01 10:00", "yyyy-MM-dd HH:mm")
+    now_box = {"current": fixed_now}
+    monkeypatch.setattr(QDateTime, "currentDateTime", lambda: now_box["current"])
+
+    timer.start(900)
+    now_box["current"] = fixed_now.addSecs(45)
+    timer._on_heartbeat_timeout()  # accumulate 45s of sleep
+
+    now_box["current"] = fixed_now.addSecs(100)
+    timer.start(900)  # new start resets everything
+
+    now_box["current"] = fixed_now.addSecs(150)
+    assert timer.elapsed_seconds() == 50  # 50s since new start, no sleep
+
+
 def test_phase_ending_warning_emits_for_break_phase_too() -> None:
     settings = _make_settings(work_duration=120, break_duration=120, snooze_duration=2)
     sp_manager = SessionPhaseManager(settings=settings)
