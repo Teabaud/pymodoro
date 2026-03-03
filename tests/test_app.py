@@ -65,6 +65,7 @@ class DummySessionPhaseManager:
 class DummyTrayController:
     def __init__(self, *_: Any, **__: Any) -> None:
         self.openAppRequested = DummySignal()
+        self.openSettingsRequested = DummySignal()
         self.checkInRequested = DummySignal()
         self.pauseUntilRequested = DummySignal()
         self.snoozeRequested = DummySignal()
@@ -160,7 +161,7 @@ class DummySettingsWindow:
         self.paused_states.append(paused)
 
 
-class DummyDashboardWindow:
+class DummyAppWindow:
     def __init__(self, *_: Any, **__: Any) -> None:
         self.visible = False
 
@@ -232,7 +233,7 @@ def test_pomodoro_app_wires_controllers(
     monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
     monkeypatch.setattr(app_module, "CheckInScreen", DummyPrompt)
     monkeypatch.setattr(app_module, "SettingsWindow", DummySettingsWindow)
-    monkeypatch.setattr(app_module, "DashboardWindow", DummyDashboardWindow)
+    monkeypatch.setattr(app_module, "AppWindow", DummyAppWindow)
 
     dummy_app = DummyApp()
     app = app_module.PomodoroApp(settings, app=cast(Any, dummy_app))

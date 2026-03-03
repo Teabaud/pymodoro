@@ -12,7 +12,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DRAFTS_DIR = PROJECT_ROOT / "drafts"
 
 # Change this to point to any constructor script you want to play with.
-TARGET_SCRIPT = DRAFTS_DIR / "dashboard_constructor.py"
+TARGET_SCRIPT = DRAFTS_DIR / "app_constructor.py"
 
 # Directories to watch for .py changes.
 WATCHED_DIRS = [

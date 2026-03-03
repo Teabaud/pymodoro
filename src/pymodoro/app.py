@@ -5,7 +5,7 @@ import random
 from loguru import logger
 
 from pymodoro.check_in_screen import CheckInScreen
-from pymodoro.dashboard.dashboard_ui import DashboardWindow
+from pymodoro.app_ui import AppWindow
 from pymodoro.metrics_logger import CheckInSubmission, MetricsLogger
 from pymodoro.notification_sound import NotificationSoundPlayer
 from pymodoro.session import (
@@ -39,7 +39,7 @@ class PomodoroApp(QtCore.QObject):
 
         self._check_in_screen: CheckInScreen | None = None
         self._settings_window: SettingsWindow | None = None
-        self._dashboard_window: DashboardWindow | None = None
+        self._app_window: AppWindow | None = None
         self._notification_sound_player = NotificationSoundPlayer(self)
         self._awaiting_check_in_close: bool = False
 
@@ -54,7 +54,7 @@ class PomodoroApp(QtCore.QObject):
         self._tray_controller.snoozeRequested.connect(self._on_snoozed_clicked)
         self._tray_controller.resumeRequested.connect(self._sp_manager.resume)
         self._tray_controller.quitRequested.connect(self._app.quit)
-        self._tray_controller.openAppRequested.connect(self._open_dashboard_window)
+        self._tray_controller.openAppRequested.connect(self._open_app_window)
         self._tray_controller.openSettingsRequested.connect(self._open_settings_window)
         self._tray_controller.checkInRequested.connect(self._show_check_in_window)
 
@@ -86,12 +86,12 @@ class PomodoroApp(QtCore.QObject):
         )
         self._settings_window.show()
 
-    def _open_dashboard_window(self) -> None:
-        if not self._dashboard_window:
-            self._dashboard_window = DashboardWindow(self._settings)
-        self._dashboard_window.show()
-        self._dashboard_window.raise_()
-        self._dashboard_window.activateWindow()
+    def _open_app_window(self) -> None:
+        if not self._app_window:
+            self._app_window = AppWindow(self._settings)
+        self._app_window.show()
+        self._app_window.raise_()
+        self._app_window.activateWindow()
 
     def _on_settings_saved(self) -> None:
         self._tray_controller.refresh()
