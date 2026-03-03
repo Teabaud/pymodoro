@@ -160,6 +160,23 @@ class DummySettingsWindow:
         self.paused_states.append(paused)
 
 
+class DummyDashboardWindow:
+    def __init__(self, *_: Any, **__: Any) -> None:
+        self.visible = False
+
+    def isVisible(self) -> bool:
+        return self.visible
+
+    def raise_(self) -> None:
+        self.visible = True
+
+    def activateWindow(self) -> None:
+        self.visible = True
+
+    def show(self) -> None:
+        self.visible = True
+
+
 class DummyNotificationSoundPlayer:
     def __init__(self, *_: Any, **__: Any) -> None:
         self.play_calls = 0
@@ -215,6 +232,7 @@ def test_pomodoro_app_wires_controllers(
     monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
     monkeypatch.setattr(app_module, "CheckInScreen", DummyPrompt)
     monkeypatch.setattr(app_module, "SettingsWindow", DummySettingsWindow)
+    monkeypatch.setattr(app_module, "DashboardWindow", DummyDashboardWindow)
 
     dummy_app = DummyApp()
     app = app_module.PomodoroApp(settings, app=cast(Any, dummy_app))

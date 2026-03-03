@@ -21,6 +21,7 @@ def get_app_icon() -> QtGui.QIcon:
 
 class TrayController(QtCore.QObject):
     openAppRequested = QtCore.Signal()
+    openSettingsRequested = QtCore.Signal()
     checkInRequested = QtCore.Signal()
     pauseUntilRequested = QtCore.Signal(object)
     snoozeRequested = QtCore.Signal()
@@ -112,7 +113,7 @@ class TrayController(QtCore.QObject):
         self, reason: QtWidgets.QSystemTrayIcon.ActivationReason
     ) -> None:
         if reason == QtWidgets.QSystemTrayIcon.ActivationReason.Trigger:
-            self.openAppRequested.emit()
+            self.openSettingsRequested.emit()
 
     def _ensure_phase_warning_toast(self) -> PhaseWarningToast:
         if self._phase_warning_toast is None:
