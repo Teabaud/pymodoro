@@ -45,7 +45,6 @@ class CheckInScreen(QtWidgets.QDialog):
         parent: QtWidgets.QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self._answered = False
         self.setWindowFlags(
             QtCore.Qt.WindowType.Window
             | QtCore.Qt.WindowType.FramelessWindowHint
@@ -90,7 +89,6 @@ class CheckInScreen(QtWidgets.QDialog):
 
     def showEvent(self, event: QtGui.QShowEvent) -> None:
         super().showEvent(event)
-        self._answered = False
         self._focus_rating_widget.set_rating(None)
         self._exercise_widget.clear()
         self._prompt_card.clear()
@@ -108,12 +106,6 @@ class CheckInScreen(QtWidgets.QDialog):
         else:
             super().keyPressEvent(event)
 
-    def closeEvent(self, event: QtGui.QCloseEvent) -> None:
-        if self._answered:
-            super().closeEvent(event)
-        else:
-            event.ignore()
-
     def _on_submit(self) -> None:
         if self._prompt_card.answer == "":
             return
@@ -124,5 +116,4 @@ class CheckInScreen(QtWidgets.QDialog):
             exercise_name=self._exercise_widget.exercise_name,
             exercise_rep_count=self._exercise_widget.rep_count,
         )
-        self._answered = True
         self.submitted.emit(submission)

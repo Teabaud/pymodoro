@@ -74,7 +74,7 @@ def test_snooze_break_extends_current_work_phase(monkeypatch: Any) -> None:
     assert sp_manager._timer._phase_timer.interval() == 127_000
 
 
-def test_timeout_transitions_and_emits_work_end() -> None:
+def test_timeout_work_phase_transitions_to_break_and_emits_work_ended() -> None:
     settings = _make_settings(work_duration=10, break_duration=5, snooze_duration=2)
     sp_manager = SessionPhaseManager(settings=settings)
     work_ended: list[bool] = []
@@ -88,9 +88,19 @@ def test_timeout_transitions_and_emits_work_end() -> None:
     assert sp_manager.session_phase == SessionPhase.BREAK
     assert sp_manager._timer._phase_timer.interval() == 5_000
 
+
+def test_timeout_break_phase_emits_break_ended_and_stays_frozen() -> None:
+    settings = _make_settings(work_duration=10, break_duration=5, snooze_duration=2)
+    sp_manager = SessionPhaseManager(settings=settings)
+    break_ended: list[bool] = []
+
+    sp_manager.breakEnded.connect(lambda: break_ended.append(True))
+
+    sp_manager.start_break_phase()
     sp_manager._on_timer_finished(0)
-    assert sp_manager.session_phase == SessionPhase.WORK
-    assert sp_manager._timer._phase_timer.interval() == 10_000
+
+    assert break_ended == [True]
+    assert sp_manager.session_phase == SessionPhase.BREAK
 
 
 def test_start_work_phase_uses_default_when_seconds_not_provided() -> None:

@@ -39,6 +39,7 @@ class PomodoroApp(QtCore.QObject):
         self._check_in_screen: CheckInScreen | None = None
         self._settings_window: SettingsWindow | None = None
         self._notification_sound_player = NotificationSoundPlayer(self)
+        self._awaiting_check_in_close: bool = False
 
         self._sp_manager = SessionPhaseManager(settings=settings)
         self._tray_controller = TrayController(self._app, self._sp_manager)
@@ -46,6 +47,7 @@ class PomodoroApp(QtCore.QObject):
         self._sp_manager.phaseChanged.connect(self._on_phase_changed)
         self._sp_manager.phaseEndingSoon.connect(self._on_phase_ending_soon)
         self._sp_manager.workEnded.connect(self._show_check_in_window)
+        self._sp_manager.breakEnded.connect(self._on_break_ended)
         self._tray_controller.pauseUntilRequested.connect(self._sp_manager.pause_until)
         self._tray_controller.snoozeRequested.connect(self._on_snoozed_clicked)
         self._tray_controller.resumeRequested.connect(self._sp_manager.resume)
@@ -109,6 +111,7 @@ class PomodoroApp(QtCore.QObject):
         if self._check_in_screen is None:
             self._check_in_screen = CheckInScreen(check_in_prompt=check_in_prompt)
             self._check_in_screen.submitted.connect(self._on_check_in_screen_submit)
+            self._check_in_screen.finished.connect(self._on_check_in_finished)
         else:
             self._check_in_screen.set_check_in_prompt(check_in_prompt)
         self._check_in_screen.show()
@@ -122,7 +125,7 @@ class PomodoroApp(QtCore.QObject):
             submission.exercise_name,
             submission.exercise_rep_count,
         )
-        self._close_check_in_window()
+        self._accept_check_in_window()
 
     def _on_phase_ending_soon(self, phase: SessionPhase) -> None:
         if phase != SessionPhase.WORK:
@@ -135,9 +138,20 @@ class PomodoroApp(QtCore.QObject):
     def _on_snoozed_clicked(self) -> None:
         self._sp_manager.extend_current_phase()
 
-    def _close_check_in_window(self) -> None:
+    def _on_break_ended(self) -> None:
+        if self._check_in_screen and self._check_in_screen.isVisible():
+            self._awaiting_check_in_close = True
+        else:
+            self._sp_manager.start_work_phase()
+
+    def _on_check_in_finished(self, _: int) -> None:
+        if self._awaiting_check_in_close:
+            self._awaiting_check_in_close = False
+            self._sp_manager.start_work_phase()
+
+    def _accept_check_in_window(self) -> None:
         if self._check_in_screen is not None:
-            self._check_in_screen.close()
+            self._check_in_screen.accept()
 
     def _select_check_in_prompt(self) -> str:
         return random.choice(self._settings.check_in.prompts)

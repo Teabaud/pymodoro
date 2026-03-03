@@ -160,6 +160,7 @@ class SessionPhaseManager(QtCore.QObject):
     phaseChanged = QtCore.Signal(SessionPhase, SessionPhase, int)
     phaseEndingSoon = QtCore.Signal(SessionPhase)
     workEnded = QtCore.Signal()
+    breakEnded = QtCore.Signal()
 
     def __init__(
         self,
@@ -194,7 +195,9 @@ class SessionPhaseManager(QtCore.QObject):
         if self._phase == SessionPhase.WORK:
             self.workEnded.emit()
             self.start_break_phase()
-        else:
+        elif self._phase == SessionPhase.BREAK:
+            self.breakEnded.emit()
+        elif self._phase == SessionPhase.PAUSE:
             self.start_work_phase()
 
     def start_work_phase(self, seconds: int | None = None) -> None:

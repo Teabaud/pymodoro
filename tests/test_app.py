@@ -29,13 +29,14 @@ class DummySessionPhaseManager:
         self.phaseChanged = DummySignal()
         self.phaseEndingSoon = DummySignal()
         self.workEnded = DummySignal()
+        self.breakEnded = DummySignal()
         self.start_called = False
         self.pause_until_called: list[Any] = []
         self.resume_called = False
         self.extend_current_phase_called = 0
         self.extend_current_phase_seconds: int | None = None
-        self.start_work_phase_called: list[int] = []
-        self.start_break_phase_called: list[int] = []
+        self.start_work_phase_called: list[Any] = []
+        self.start_break_phase_called: list[Any] = []
         self.session_phase = SessionPhase.WORK
 
     def start(self) -> None:
@@ -51,11 +52,11 @@ class DummySessionPhaseManager:
         self.extend_current_phase_called += 1
         self.extend_current_phase_seconds = seconds
 
-    def start_work_phase(self, minutes: int) -> None:
-        self.start_work_phase_called.append(minutes)
+    def start_work_phase(self, seconds: int | None = None) -> None:
+        self.start_work_phase_called.append(seconds)
 
-    def start_break_phase(self, minutes: int) -> None:
-        self.start_break_phase_called.append(minutes)
+    def start_break_phase(self, seconds: int | None = None) -> None:
+        self.start_break_phase_called.append(seconds)
 
     def remaining_seconds(self) -> int:
         return 45
@@ -90,9 +91,11 @@ class DummyTrayController:
 class DummyPrompt:
     def __init__(self, *_: Any, **__: Any) -> None:
         self.submitted = DummySignal()
+        self.finished = DummySignal()
         self.visible = False
         self.show_called = 0
         self.closed = False
+        self.accepted = False
         self.check_in_prompt: str | None = None
 
     def isVisible(self) -> bool:
@@ -105,6 +108,11 @@ class DummyPrompt:
     def close(self) -> None:
         self.visible = False
         self.closed = True
+
+    def accept(self) -> None:
+        self.visible = False
+        self.accepted = True
+        self.finished.emit(1)
 
     def set_check_in_prompt(self, check_in_prompt: str) -> None:
         self.check_in_prompt = check_in_prompt
@@ -219,6 +227,7 @@ def test_pomodoro_app_wires_controllers(
     assert app._on_phase_changed in phase_manager.phaseChanged._callbacks
     assert app._on_phase_ending_soon in phase_manager.phaseEndingSoon._callbacks
     assert app._show_check_in_window in phase_manager.workEnded._callbacks
+    assert app._on_break_ended in phase_manager.breakEnded._callbacks
     assert app._show_check_in_window in tray_controller.checkInRequested._callbacks
     assert phase_manager.pause_until in tray_controller.pauseUntilRequested._callbacks
     assert app._on_snoozed_clicked in tray_controller.snoozeRequested._callbacks
@@ -410,7 +419,7 @@ def test_note_submit_closes_prompt(monkeypatch: Any, settings: AppSettings) -> N
         )
     )
 
-    assert prompt.closed is True
+    assert prompt.accepted is True
 
 
 def test_check_in_submit_creates_jsonl_log_record(
@@ -594,3 +603,72 @@ def test_phase_change_updates_open_settings_paused_state(
     app._sp_manager.phaseChanged.emit(SessionPhase.PAUSE, SessionPhase.WORK, 60)
 
     assert settings_window.paused_states == [False, True, False]
+
+
+def test_break_ended_starts_work_immediately_when_check_in_not_visible(
+    monkeypatch: Any, settings: AppSettings
+) -> None:
+    monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
+    monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
+    monkeypatch.setattr(app_module, "CheckInScreen", DummyPrompt)
+
+    app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
+    phase_manager = cast(DummySessionPhaseManager, app._sp_manager)
+
+    phase_manager.breakEnded.emit()
+
+    assert phase_manager.start_work_phase_called == [None]
+    assert app._awaiting_check_in_close is False
+
+
+def test_break_ended_freezes_session_when_check_in_still_visible(
+    monkeypatch: Any, settings: AppSettings
+) -> None:
+    monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
+    monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
+    monkeypatch.setattr(app_module, "CheckInScreen", DummyPrompt)
+
+    app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
+    phase_manager = cast(DummySessionPhaseManager, app._sp_manager)
+    check_in = DummyPrompt()
+    check_in.visible = True
+    app_any = cast(Any, app)
+    app_any._check_in_screen = check_in
+
+    phase_manager.breakEnded.emit()
+
+    assert app._awaiting_check_in_close is True
+    assert phase_manager.start_work_phase_called == []
+
+
+def test_check_in_closed_starts_work_and_clears_flag_when_awaiting(
+    monkeypatch: Any, settings: AppSettings
+) -> None:
+    monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
+    monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
+    monkeypatch.setattr(app_module, "CheckInScreen", DummyPrompt)
+
+    app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
+    phase_manager = cast(DummySessionPhaseManager, app._sp_manager)
+    app_any = cast(Any, app)
+    app_any._awaiting_check_in_close = True
+
+    app._on_check_in_finished(1)
+
+    assert phase_manager.start_work_phase_called == [None]
+    assert app._awaiting_check_in_close is False
+
+
+def test_check_in_closed_does_nothing_when_not_awaiting(
+    monkeypatch: Any, settings: AppSettings
+) -> None:
+    monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
+    monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
+    monkeypatch.setattr(app_module, "CheckInScreen", DummyPrompt)
+
+    app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
+    phase_manager = cast(DummySessionPhaseManager, app._sp_manager)
+
+    app._on_check_in_finished(0)
+
+    assert phase_manager.start_work_phase_called == []
