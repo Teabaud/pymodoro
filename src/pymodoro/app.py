@@ -142,6 +142,7 @@ class PomodoroApp(QtCore.QObject):
         if self._check_in_screen and self._check_in_screen.isVisible():
             self._awaiting_check_in_close = True
         else:
+            self._play_notification_sound()
             self._sp_manager.start_work_phase()
 
     def _on_check_in_finished(self, _: int) -> None:
