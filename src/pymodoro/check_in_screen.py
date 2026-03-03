@@ -8,6 +8,7 @@ from pymodoro.check_in_screen_widgets import (
     PromptCard,
 )
 from pymodoro.metrics_logger import CheckInSubmission
+from pymodoro.tray import get_app_icon
 
 STYLESHEET = """
 QLabel {
@@ -52,6 +53,7 @@ class CheckInScreen(QtWidgets.QDialog):
         )
         self.setWindowModality(QtCore.Qt.WindowModality.WindowModal)
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_ShowWithoutActivating, False)
+        self.setWindowIcon(get_app_icon())
 
         self._prompt_card = PromptCard(check_in_prompt, self)
         self._focus_rating_widget = FocusRatingWidget(self)

@@ -15,6 +15,10 @@ _PHASE_ICON_FILES = {
 }
 
 
+def get_app_icon() -> QtGui.QIcon:
+    return QtGui.QIcon(str(_ICON_DIR / "icon-break.svg"))
+
+
 class TrayController(QtCore.QObject):
     openAppRequested = QtCore.Signal()
     checkInRequested = QtCore.Signal()

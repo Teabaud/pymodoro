@@ -16,7 +16,7 @@ from pymodoro.settings_window_widgets import (
     SessionSectionWidget,
     TimersSectionWidget,
 )
-from pymodoro.tray import PauseUntilDialog
+from pymodoro.tray import PauseUntilDialog, get_app_icon
 
 # isort: split
 from PySide6 import QtCore, QtGui
@@ -68,6 +68,7 @@ class SettingsWindow(QDialog):
         self._is_paused = False
 
         self.setWindowTitle("Pymodoro Settings")
+        self.setWindowIcon(get_app_icon())
         self.setMinimumSize(480, 400)
         self.resize(480, 500)
 
