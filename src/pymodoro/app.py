@@ -4,8 +4,9 @@ import random
 
 from loguru import logger
 
-from pymodoro.check_in_screen import CheckInScreen
 from pymodoro.app_ui import AppWindow
+from pymodoro.app_ui_widgets.settings_panel import SettingsPanel
+from pymodoro.check_in_screen import CheckInScreen
 from pymodoro.metrics_logger import CheckInSubmission, MetricsLogger
 from pymodoro.notification_sound import NotificationSoundPlayer
 from pymodoro.session import (
@@ -19,6 +20,8 @@ from pymodoro.tray import TrayController
 # isort: split
 from PySide6 import QtCore
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
+
+SettingsUI = SettingsWindow | SettingsPanel
 
 
 def _get_qt_app() -> QApplication:
@@ -64,34 +67,28 @@ class PomodoroApp(QtCore.QObject):
         self.launch = self._app.exec
 
     def _open_settings_window(self) -> None:
-        if self._settings_window and self._settings_window.isVisible():
-            self._settings_window.set_paused(
-                self._sp_manager.session_phase == SessionPhase.PAUSE
-            )
-            self._settings_window.raise_()
-            self._settings_window.activateWindow()
-            return
-        self._settings_window = SettingsWindow(self._settings)
-        self._settings_window.settingsSaved.connect(self._on_settings_saved)
-        self._settings_window.pauseUntilRequested.connect(self._sp_manager.pause_until)
-        self._settings_window.resumeRequested.connect(self._sp_manager.resume)
-        self._settings_window.startWorkRequested.connect(
-            self._sp_manager.start_work_phase
-        )
-        self._settings_window.startBreakRequested.connect(
-            self._sp_manager.start_break_phase
-        )
-        self._settings_window.set_paused(
-            self._sp_manager.session_phase == SessionPhase.PAUSE
-        )
+        if not self._settings_window:
+            self._settings_window = SettingsWindow(self._settings)
+            self._connect_settings_signals(self._settings_window)
         self._settings_window.show()
+        self._settings_window.raise_()
+        self._settings_window.activateWindow()
 
     def _open_app_window(self) -> None:
         if not self._app_window:
             self._app_window = AppWindow(self._settings)
+            self._connect_settings_signals(self._app_window.get_settings_panel())
         self._app_window.show()
         self._app_window.raise_()
         self._app_window.activateWindow()
+
+    def _connect_settings_signals(self, settings_ui: SettingsUI) -> None:
+        settings_ui.settingsSaved.connect(self._on_settings_saved)
+        settings_ui.pauseUntilRequested.connect(self._sp_manager.pause_until)
+        settings_ui.resumeRequested.connect(self._sp_manager.resume)
+        settings_ui.startWorkRequested.connect(self._sp_manager.start_work_phase)
+        settings_ui.startBreakRequested.connect(self._sp_manager.start_break_phase)
+        settings_ui.set_paused(self._sp_manager.session_phase == SessionPhase.PAUSE)
 
     def _on_settings_saved(self) -> None:
         self._tray_controller.refresh()
@@ -112,6 +109,9 @@ class PomodoroApp(QtCore.QObject):
             self._play_notification_sound()
         if self._settings_window and self._settings_window.isVisible():
             self._settings_window.set_paused(current_phase == SessionPhase.PAUSE)
+        if self._app_window and self._app_window.isVisible():
+            settings_panel = self._app_window.get_settings_panel()
+            settings_panel.set_paused(current_phase == SessionPhase.PAUSE)
         self._metrics_logger.log_phase_duration(previous_phase, previous_phase_duration)
 
     def _show_check_in_window(self) -> None:

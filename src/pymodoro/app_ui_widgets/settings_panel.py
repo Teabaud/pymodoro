@@ -16,15 +16,18 @@ from pymodoro.settings_ui_widgets import (
     SessionSectionWidget,
     TimersSectionWidget,
 )
-from pymodoro.tray import PauseUntilDialog, get_app_icon
+from pymodoro.tray import PauseUntilDialog
 
 # isort: split
-from PySide6 import QtCore, QtGui
+from PySide6 import QtCore
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
+    QFrame,
     QMessageBox,
+    QScrollArea,
     QVBoxLayout,
+    QWidget,
 )
 
 StandardButton = QDialogButtonBox.StandardButton
@@ -44,12 +47,12 @@ class SettingsDraft:
             work_duration=settings.timers.work_duration,
             break_duration=settings.timers.break_duration,
             snooze_duration=settings.timers.snooze_duration,
-            check_in_prompts=list(settings.check_in.prompts),
+            check_in_prompts=settings.check_in.prompts,
             notification_sound_enabled=settings.notification_sound_enabled,
         )
 
 
-class SettingsWindow(QDialog):
+class SettingsPanel(QWidget):
     settingsSaved = QtCore.Signal()
     pauseUntilRequested = QtCore.Signal(object)
     resumeRequested = QtCore.Signal()
@@ -59,7 +62,7 @@ class SettingsWindow(QDialog):
     def __init__(
         self,
         settings: AppSettings,
-        parent: QDialog | None = None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._settings = settings
@@ -67,22 +70,20 @@ class SettingsWindow(QDialog):
         self._dirty = False
         self._is_paused = False
 
-        self.setWindowTitle("Pymodoro Settings")
-        self.setWindowIcon(get_app_icon())
-        self.setMinimumSize(480, 400)
-        self.resize(480, 500)
-
-        self._session_group = SessionSectionWidget()
+        self._session_group = SessionSectionWidget(self)
         self._timers_group = TimersSectionWidget(
             work_duration=self._draft.work_duration,
             break_duration=self._draft.break_duration,
             snooze_duration=self._draft.snooze_duration,
+            parent=self,
         )
         self._prompts_group = PromptsSectionWidget(
-            check_in_prompts=self._draft.check_in_prompts
+            check_in_prompts=self._draft.check_in_prompts,
+            parent=self,
         )
         self._notifications_group = NotificationsSectionWidget(
-            notification_sound_enabled=self._draft.notification_sound_enabled
+            notification_sound_enabled=self._draft.notification_sound_enabled,
+            parent=self,
         )
 
         self._session_group.pauseResumeClicked.connect(self._on_pause_resume_clicked)
@@ -96,23 +97,60 @@ class SettingsWindow(QDialog):
         self._button_box.accepted.connect(self._on_save)
         self._button_box.rejected.connect(self._on_cancel)
 
-        layout = QVBoxLayout(self)
+        content = QWidget()
+        layout = QVBoxLayout(content)
         layout.addWidget(self._session_group)
         layout.addWidget(self._timers_group)
         layout.addWidget(self._notifications_group)
         layout.addWidget(self._prompts_group)
         layout.addWidget(self._button_box)
 
+        scroll = QScrollArea(self)
+        scroll.setWidget(content)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(
+            QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+
+        root = QVBoxLayout(self)
+        root.addWidget(scroll)
+
+        self.setStyleSheet("""
+            SettingsPanel {
+                background-color: palette(base);
+                border-radius: 10px;
+                margin: 12px 0px 0px 0px;
+            }
+        """)
+
+        self.setMaximumWidth(600)
+
     def set_paused(self, paused: bool) -> None:
         self._is_paused = paused
         self._session_group.set_paused(paused)
 
+    def has_unsaved_changes(self) -> bool:
+        return self._dirty
+
+    def prepare_leave(self) -> bool:
+        """Return True if it's OK to leave (no dirty, or user saved/discarded)."""
+        if not self._dirty:
+            return True
+        result = self._confirm_close_for_dirty_state()
+        if result == QMessageBox.StandardButton.Cancel:
+            return False
+        if result == QMessageBox.StandardButton.Save and not self._try_save():
+            return False
+        self._dirty = False
+        return True
+
     def _prompt_pause_until(self) -> QtCore.QDateTime | None:
         default_datetime = QtCore.QDateTime.currentDateTime().addSecs(3600)
         dialog = PauseUntilDialog(default_datetime, self)
-        accepted_code = getattr(getattr(QDialog, "DialogCode", None), "Accepted", 1)
-        if dialog.exec() == accepted_code:
+        if dialog.exec() == QDialog.DialogCode.Accepted:
             return dialog.selected_datetime()
+        return None
 
     def _on_pause_resume_clicked(self) -> None:
         if self._is_paused:
@@ -121,13 +159,12 @@ class SettingsWindow(QDialog):
         pause_datetime = self._prompt_pause_until()
         if pause_datetime is not None:
             self.pauseUntilRequested.emit(pause_datetime)
-            self.close()
 
     def _prompt_duration(self, title: str, default_seconds: int) -> int | None:
         dialog = DurationSelectionDialog(title, default_seconds, self)
-        accepted_code = getattr(getattr(QDialog, "DialogCode", None), "Accepted", 1)
-        if dialog.exec() == accepted_code:
+        if dialog.exec() == QDialog.DialogCode.Accepted:
             return dialog.value()
+        return None
 
     def _on_start_work_clicked(self) -> None:
         seconds = self._prompt_duration(
@@ -135,7 +172,6 @@ class SettingsWindow(QDialog):
         )
         if seconds is not None:
             self.startWorkRequested.emit(seconds)
-            self.close()
 
     def _on_start_break_clicked(self) -> None:
         seconds = self._prompt_duration(
@@ -143,7 +179,6 @@ class SettingsWindow(QDialog):
         )
         if seconds is not None:
             self.startBreakRequested.emit(seconds)
-            self.close()
 
     def _mark_dirty(self) -> None:
         self._dirty = True
@@ -160,37 +195,53 @@ class SettingsWindow(QDialog):
         try:
             timers = self._timers_group.to_timers_settings()
             check_in_prompts = self._prompts_group.prompts_editor.get_prompts()
-            sound_enabled = self._notifications_group.is_sound_enabled()
         except ValidationError as error:
             self._show_validation_error(error)
             return False
+
+        sound_enabled = self._notifications_group.is_sound_enabled()
 
         self._settings.timers = timers
         self._settings.check_in.prompts = check_in_prompts
         self._settings.notification_sound_enabled = sound_enabled
         save_settings(self._settings)
+        self._draft = SettingsDraft.from_settings(self._settings)
         self._dirty = False
         self.settingsSaved.emit()
         return True
 
     def _on_save(self) -> None:
-        if self._try_save():
-            self.accept()
+        self._try_save()
 
     def _on_cancel(self) -> None:
-        self.close()
+        self._reload_ui_from_settings()
 
-    def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
-        if event.key() in (QtCore.Qt.Key.Key_Return, QtCore.Qt.Key.Key_Enter):
-            event.ignore()
-            return
-        super().keyPressEvent(event)
+    def _reload_ui_from_settings(self) -> None:
+        """Revert UI to last saved settings (e.g. on Cancel)."""
+        self._draft = SettingsDraft.from_settings(self._settings)
+        self._dirty = False
+
+        self._timers_group.work_duration.blockSignals(True)
+        self._timers_group.break_duration.blockSignals(True)
+        self._timers_group.snooze_duration.blockSignals(True)
+        try:
+            self._timers_group.work_duration.setValue(self._draft.work_duration)
+            self._timers_group.break_duration.setValue(self._draft.break_duration)
+            self._timers_group.snooze_duration.setValue(self._draft.snooze_duration)
+        finally:
+            self._timers_group.work_duration.blockSignals(False)
+            self._timers_group.break_duration.blockSignals(False)
+            self._timers_group.snooze_duration.blockSignals(False)
+
+        self._prompts_group.prompts_editor.set_prompts(self._draft.check_in_prompts)
+        self._notifications_group.set_sound_enabled(
+            self._draft.notification_sound_enabled
+        )
 
     def _confirm_close_for_dirty_state(self) -> QMessageBox.StandardButton:
         message_box = QMessageBox(self)
         message_box.setWindowTitle("Unsaved Changes")
         message_box.setText("Settings have been modified. Save changes?")
-        message_box.setIcon(QMessageBox.Icon.Question)
         message_box.setStandardButtons(
             QMessageBox.StandardButton.Save
             | QMessageBox.StandardButton.Discard
@@ -199,17 +250,3 @@ class SettingsWindow(QDialog):
         message_box.setDefaultButton(QMessageBox.StandardButton.Save)
         message_box.setEscapeButton(QMessageBox.StandardButton.Cancel)
         return QMessageBox.StandardButton(message_box.exec())
-
-    def closeEvent(self, event: QtGui.QCloseEvent) -> None:
-        if not self._dirty:
-            super().closeEvent(event)
-            return
-
-        result = self._confirm_close_for_dirty_state()
-        if result == QMessageBox.StandardButton.Cancel:
-            event.ignore()
-            return
-        if result == QMessageBox.StandardButton.Save and not self._try_save():
-            event.ignore()
-            return
-        event.accept()
