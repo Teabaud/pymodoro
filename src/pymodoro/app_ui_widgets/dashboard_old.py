@@ -4,7 +4,7 @@ from typing import Iterable, cast
 from PySide6 import QtCore, QtGui, QtWidgets
 from PySide6.QtCore import Qt
 
-from pymodoro.app_ui_widgets.dashboard_widgets import (
+from pymodoro.app_ui_widgets.dashboard_widgets_old import (
     CalendarContainer,
     DateRangeLabel,
     FocusTrendWidget,
