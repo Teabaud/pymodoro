@@ -10,7 +10,7 @@ from PySide6.QtCore import QUrl
 from PySide6.QtMultimedia import QSoundEffect
 
 NOTIFICATION_SOUND_FILE_PATH = (
-    Path(__file__).resolve().parents[2] / "assets" / "notification.wav"
+    Path(__file__).resolve().parents[2] / "assets" / "sounds" / "notification.wav"
 )
 
 

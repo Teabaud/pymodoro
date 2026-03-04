@@ -9,7 +9,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 ActivationReason = QtWidgets.QSystemTrayIcon.ActivationReason
 
-_ICON_DIR = Path(__file__).parent / "icons"
+_ICON_DIR = Path(__file__).resolve().parents[2] / "assets" / "icons"
 _PHASE_ICON_FILES = {
     SessionPhase.WORK: _ICON_DIR / "icon-work.svg",
     SessionPhase.BREAK: _ICON_DIR / "icon-break.svg",
