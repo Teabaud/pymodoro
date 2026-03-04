@@ -97,7 +97,7 @@ class SettingsPanel(QWidget):
         self._prompts_group.changed.connect(self._mark_dirty)
         self._notifications_group.changed.connect(self._mark_dirty)
         self._save_button.clicked.connect(self._save_settings)
-        self._reset_button.clicked.connect(self._reload_ui_from_settings)
+        self._reset_button.clicked.connect(self._reset_settings)
 
         content = QWidget(self)
         layout = QVBoxLayout(content)
@@ -147,7 +147,7 @@ class SettingsPanel(QWidget):
             case QMessageBox.StandardButton.Cancel:
                 return False
             case QMessageBox.StandardButton.Discard:
-                return True
+                return self._reset_settings()
             case _:
                 return False
 
@@ -217,7 +217,7 @@ class SettingsPanel(QWidget):
         self._settings.notification_sound_enabled = sound_enabled
         return True
 
-    def _reload_ui_from_settings(self) -> None:
+    def _reset_settings(self) -> bool:
         """Revert UI to last saved settings (e.g. on Cancel)."""
         self._draft = SettingsDraft.from_settings(self._settings)
         self._dirty = False
@@ -238,6 +238,7 @@ class SettingsPanel(QWidget):
         self._notifications_group.set_sound_enabled(
             self._draft.notification_sound_enabled
         )
+        return True
 
     def _confirm_close_for_dirty_state(self) -> QMessageBox.StandardButton:
         message_box = QMessageBox(self)
