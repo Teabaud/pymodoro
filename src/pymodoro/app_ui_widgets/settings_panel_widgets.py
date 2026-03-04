@@ -386,3 +386,6 @@ class NotificationsSectionWidget(QGroupBox):
 
     def is_sound_enabled(self) -> bool:
         return self._sound_checkbox.isChecked()
+
+    def set_sound_enabled(self, enabled: bool) -> None:
+        self._sound_checkbox.setChecked(enabled)

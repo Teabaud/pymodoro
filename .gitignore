@@ -3,3 +3,4 @@ __pycache__/
 *.pyc
 **settings.yaml
 *.jsonl
+scripts/

@@ -7,6 +7,7 @@ from typing import Any, Callable, cast
 import pytest
 
 import pymodoro.app as app_module
+from pymodoro.app_ui_widgets.pages import Page
 from pymodoro.metrics_logger import CheckInSubmission, MetricsLogger
 from pymodoro.session import SessionPhase
 from pymodoro.settings import AppSettings, CheckInSettings, TimersSettings
@@ -65,6 +66,7 @@ class DummySessionPhaseManager:
 class DummyTrayController:
     def __init__(self, *_: Any, **__: Any) -> None:
         self.openAppRequested = DummySignal()
+        self.openSettingsRequested = DummySignal()
         self.checkInRequested = DummySignal()
         self.pauseUntilRequested = DummySignal()
         self.snoozeRequested = DummySignal()
@@ -131,7 +133,7 @@ class DummyApp:
         self.quit_called = True
 
 
-class DummySettingsWindow:
+class DummySettingsPanel:
     def __init__(self, settings: AppSettings) -> None:
         self.settings = settings
         self.settingsSaved = DummySignal()
@@ -158,6 +160,31 @@ class DummySettingsWindow:
 
     def set_paused(self, paused: bool) -> None:
         self.paused_states.append(paused)
+
+
+class DummyAppWindow:
+    def __init__(self, settings: AppSettings, *_: Any, **__: Any) -> None:
+        self.visible = False
+        self._settings_panel = DummySettingsPanel(settings)
+        self.last_navigated_page: Page | None = None
+
+    def isVisible(self) -> bool:
+        return self.visible
+
+    def raise_(self) -> None:
+        self.visible = True
+
+    def activateWindow(self) -> None:
+        self.visible = True
+
+    def show(self) -> None:
+        self.visible = True
+
+    def get_settings_panel(self) -> DummySettingsPanel:
+        return self._settings_panel
+
+    def navigate_to_page(self, page: Page, *_: Any, **__: Any) -> None:
+        self.last_navigated_page = page
 
 
 class DummyNotificationSoundPlayer:
@@ -214,7 +241,7 @@ def test_pomodoro_app_wires_controllers(
     monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
     monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
     monkeypatch.setattr(app_module, "CheckInScreen", DummyPrompt)
-    monkeypatch.setattr(app_module, "SettingsWindow", DummySettingsWindow)
+    monkeypatch.setattr(app_module, "AppWindow", DummyAppWindow)
 
     dummy_app = DummyApp()
     app = app_module.PomodoroApp(settings, app=cast(Any, dummy_app))
@@ -232,16 +259,16 @@ def test_pomodoro_app_wires_controllers(
     assert phase_manager.pause_until in tray_controller.pauseUntilRequested._callbacks
     assert app._on_snoozed_clicked in tray_controller.snoozeRequested._callbacks
     assert phase_manager.resume in tray_controller.resumeRequested._callbacks
-    app._open_settings_window()
-    settings_window = cast(DummySettingsWindow, app._settings_window)
-    assert phase_manager.pause_until in settings_window.pauseUntilRequested._callbacks
-    assert phase_manager.resume in settings_window.resumeRequested._callbacks
+    app._open_settings_panel()
+    app_window = cast(DummyAppWindow, app._app_window)
+    settings_panel = cast(DummySettingsPanel, app_window.get_settings_panel())
+    assert phase_manager.pause_until in settings_panel.pauseUntilRequested._callbacks
+    assert phase_manager.resume in settings_panel.resumeRequested._callbacks
     assert (
-        phase_manager.start_work_phase in settings_window.startWorkRequested._callbacks
+        phase_manager.start_work_phase in settings_panel.startWorkRequested._callbacks
     )
     assert (
-        phase_manager.start_break_phase
-        in settings_window.startBreakRequested._callbacks
+        phase_manager.start_break_phase in settings_panel.startBreakRequested._callbacks
     )
     assert dummy_app.quit in tray_controller.quitRequested._callbacks
     app.launch()
@@ -292,13 +319,14 @@ def test_start_break_from_settings_starts_break(
     monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
     monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
     monkeypatch.setattr(app_module, "CheckInScreen", DummyPrompt)
-    monkeypatch.setattr(app_module, "SettingsWindow", DummySettingsWindow)
+    monkeypatch.setattr(app_module, "AppWindow", DummyAppWindow)
 
     app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
-    app._open_settings_window()
-    settings_window = cast(DummySettingsWindow, app._settings_window)
+    app._open_settings_panel()
+    app_window = cast(DummyAppWindow, app._app_window)
+    settings_panel = cast(DummySettingsPanel, app_window.get_settings_panel())
 
-    settings_window.startBreakRequested.emit(12)
+    settings_panel.startBreakRequested.emit(12)
 
     phase_manager = cast(DummySessionPhaseManager, app._sp_manager)
     assert phase_manager.start_break_phase_called == [12]
@@ -394,7 +422,7 @@ def test_pause_to_work_phase_change_plays_sound(
 
     app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
 
-    app._sp_manager.phaseChanged.emit(SessionPhase.PAUSE, SessionPhase.WORK, 120)
+    app._sp_manager.phaseChanged.emit(SessionPhase.BREAK, SessionPhase.WORK, 120)
 
     assert sound_player.play_calls == 1
 
@@ -568,17 +596,17 @@ def test_settings_saved_refreshes_tray(monkeypatch: Any, settings: AppSettings) 
     monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
     monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
     monkeypatch.setattr(app_module, "CheckInScreen", DummyPrompt)
-    monkeypatch.setattr(app_module, "SettingsWindow", DummySettingsWindow)
+    monkeypatch.setattr(app_module, "AppWindow", DummyAppWindow)
 
     app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
     tray_controller = cast(DummyTrayController, app._tray_controller)
     tray_controller.refresh_called = False
 
-    app._open_settings_window()
-    settings_window = cast(DummySettingsWindow, app._settings_window)
-    settings_window.settingsSaved.emit()
+    app._open_settings_panel()
+    app_window = cast(DummyAppWindow, app._app_window)
+    settings_panel = cast(DummySettingsPanel, app_window.get_settings_panel())
+    settings_panel.settingsSaved.emit()
 
-    assert settings_window.show_called is True
     assert tray_controller.refresh_called is True
 
 
@@ -588,7 +616,7 @@ def test_phase_change_updates_open_settings_paused_state(
     monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
     monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
     monkeypatch.setattr(app_module, "CheckInScreen", DummyPrompt)
-    monkeypatch.setattr(app_module, "SettingsWindow", DummySettingsWindow)
+    monkeypatch.setattr(app_module, "AppWindow", DummyAppWindow)
     monkeypatch.setattr(
         app_module,
         "NotificationSoundPlayer",
@@ -596,13 +624,14 @@ def test_phase_change_updates_open_settings_paused_state(
     )
 
     app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
-    app._open_settings_window()
-    settings_window = cast(DummySettingsWindow, app._settings_window)
+    app._open_settings_panel()
+    app_window = cast(DummyAppWindow, app._app_window)
+    settings_panel = cast(DummySettingsPanel, app_window.get_settings_panel())
 
     app._sp_manager.phaseChanged.emit(SessionPhase.WORK, SessionPhase.PAUSE, 300)
     app._sp_manager.phaseChanged.emit(SessionPhase.PAUSE, SessionPhase.WORK, 60)
 
-    assert settings_window.paused_states == [False, True, False]
+    assert settings_panel.paused_states == [False, True, False]
 
 
 def test_break_ended_starts_work_immediately_when_check_in_not_visible(
@@ -672,3 +701,19 @@ def test_check_in_closed_does_nothing_when_not_awaiting(
     app._on_check_in_finished(0)
 
     assert phase_manager.start_work_phase_called == []
+
+
+def test_open_settings_panel_navigates_app_window_to_settings(
+    monkeypatch: Any, settings: AppSettings
+) -> None:
+    monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
+    monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
+    monkeypatch.setattr(app_module, "CheckInScreen", DummyPrompt)
+    monkeypatch.setattr(app_module, "AppWindow", DummyAppWindow)
+
+    app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
+
+    app._open_settings_panel()
+    app_window = cast(DummyAppWindow, app._app_window)
+
+    assert app_window.last_navigated_page == Page.SETTINGS

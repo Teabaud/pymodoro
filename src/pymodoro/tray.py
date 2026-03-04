@@ -7,6 +7,8 @@ from pymodoro.session import SessionPhase, SessionPhaseManager
 # isort: split
 from PySide6 import QtCore, QtGui, QtWidgets
 
+ActivationReason = QtWidgets.QSystemTrayIcon.ActivationReason
+
 _ICON_DIR = Path(__file__).parent / "icons"
 _PHASE_ICON_FILES = {
     SessionPhase.WORK: _ICON_DIR / "icon-work.svg",
@@ -21,6 +23,7 @@ def get_app_icon() -> QtGui.QIcon:
 
 class TrayController(QtCore.QObject):
     openAppRequested = QtCore.Signal()
+    openSettingsRequested = QtCore.Signal()
     checkInRequested = QtCore.Signal()
     pauseUntilRequested = QtCore.Signal(object)
     snoozeRequested = QtCore.Signal()
@@ -108,11 +111,9 @@ class TrayController(QtCore.QObject):
         if pause_datetime is not None:
             self.pauseUntilRequested.emit(pause_datetime)
 
-    def _on_tray_activated(
-        self, reason: QtWidgets.QSystemTrayIcon.ActivationReason
-    ) -> None:
-        if reason == QtWidgets.QSystemTrayIcon.ActivationReason.Trigger:
-            self.openAppRequested.emit()
+    def _on_tray_activated(self, reason: ActivationReason) -> None:
+        if reason == ActivationReason.Trigger:
+            self.openSettingsRequested.emit()
 
     def _ensure_phase_warning_toast(self) -> PhaseWarningToast:
         if self._phase_warning_toast is None:
