@@ -13,7 +13,7 @@ from pymodoro.session import (
     SessionPhaseManager,
 )
 from pymodoro.settings import AppSettings
-from pymodoro.settings_window import SettingsWindow
+from pymodoro.settings_ui import SettingsWindow
 from pymodoro.tray import TrayController
 
 # isort: split

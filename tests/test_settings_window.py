@@ -8,7 +8,7 @@ from PySide6 import QtCore, QtGui
 from PySide6.QtWidgets import QMessageBox, QSizePolicy
 
 from pymodoro.settings import AppSettings, CheckInSettings, TimersSettings
-from pymodoro.settings_window import SettingsWindow
+from pymodoro.settings_ui import SettingsWindow
 
 
 @pytest.fixture
@@ -146,7 +146,7 @@ def test_save_updates_settings_and_emits_signal(
     write_calls: list[AppSettings] = []
     window.settingsSaved.connect(lambda: saved.append(True))
     monkeypatch.setattr(
-        "pymodoro.settings_window.save_settings",
+        "pymodoro.settings_ui.save_settings",
         lambda cfg: write_calls.append(cfg),
     )
 

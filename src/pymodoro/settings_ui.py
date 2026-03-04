@@ -9,7 +9,7 @@ from pymodoro.settings import (
     AppSettings,
     save_settings,
 )
-from pymodoro.settings_window_widgets import (
+from pymodoro.settings_ui_widgets import (
     DurationSelectionDialog,
     NotificationsSectionWidget,
     PromptsSectionWidget,
