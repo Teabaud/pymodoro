@@ -8,16 +8,16 @@ from pathlib import Path
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DRAFTS_DIR = PROJECT_ROOT / "drafts"
+HOT_RELOAD_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = HOT_RELOAD_DIR.parent
 
 # Change this to point to any constructor script you want to play with.
-TARGET_SCRIPT = DRAFTS_DIR / "app_constructor.py"
+TARGET_SCRIPT = HOT_RELOAD_DIR / "app_constructor.py"
 
 # Directories to watch for .py changes.
 WATCHED_DIRS = [
     PROJECT_ROOT / "src" / "pymodoro",
-    DRAFTS_DIR,
+    HOT_RELOAD_DIR,
 ]
 
 
