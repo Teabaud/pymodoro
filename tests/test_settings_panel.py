@@ -154,7 +154,7 @@ def test_save_updates_settings_and_emits_signal(
     panel._prompts_group.prompts_editor.set_prompts(["N1", "N2"])
     panel._mark_dirty()
 
-    result = panel._try_save()
+    result = panel._save_settings()
 
     assert result is True
     assert settings.timers.work_duration == 42
@@ -169,7 +169,9 @@ def test_pressing_enter_does_not_trigger_save(
 ) -> None:
     panel = SettingsPanel(settings)
     save_attempts: list[bool] = []
-    monkeypatch.setattr(panel, "_try_save", lambda: save_attempts.append(True) or True)
+    monkeypatch.setattr(
+        panel, "_save_settings", lambda: save_attempts.append(True) or True
+    )
 
     key_press = QtGui.QKeyEvent(
         QtCore.QEvent.Type.KeyPress,
@@ -218,18 +220,29 @@ def test_close_event_cancel_keeps_window_open(
     assert panel._dirty is True
 
 
-def test_close_event_save_path_uses_try_save(
+def test_close_event_save_path_uses_save_settings(
     qcoreapp: Any, monkeypatch: Any, settings: AppSettings
 ) -> None:
     panel = SettingsPanel(settings)
     panel._dirty = True
     save_attempts: list[bool] = []
+
+    # Ensure the dialog path returns "Save"
     monkeypatch.setattr(
         panel,
         "_confirm_close_for_dirty_state",
         lambda: QMessageBox.StandardButton.Save,
     )
-    monkeypatch.setattr(panel, "_try_save", lambda: save_attempts.append(True) or True)
+
+    # Wrap the real _save_settings so we can observe the call while still letting it
+    # perform the actual save logic (including clearing _dirty).
+    real_save_settings = panel._save_settings
+
+    def wrapped_save_settings() -> bool:
+        save_attempts.append(True)
+        return real_save_settings()
+
+    monkeypatch.setattr(panel, "_save_settings", wrapped_save_settings)
 
     can_leave = panel.prepare_leave()
 

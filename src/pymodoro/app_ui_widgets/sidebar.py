@@ -1,5 +1,6 @@
 from PySide6 import QtCore, QtWidgets
 
+from pymodoro.app_ui_widgets.pages import Page
 from pymodoro.tray import get_app_icon
 
 
@@ -16,11 +17,8 @@ class Logo(QtWidgets.QToolButton):
 class NavItem(QtWidgets.QListWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        for label in [
-            "Dashboard",
-            "Settings",
-        ]:
-            self.addItem(label)
+        for page in Page:
+            self.addItem(page)
 
         self.setStyleSheet("""
             QListWidget {
@@ -50,7 +48,7 @@ class Separator(QtWidgets.QFrame):
 
 
 class Sidebar(QtWidgets.QFrame):
-    navigate = QtCore.Signal(str)
+    navigate = QtCore.Signal(Page)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -61,7 +59,7 @@ class Sidebar(QtWidgets.QFrame):
         layout.setSpacing(4)
 
         self._logo = Logo(self)
-        self._logo.clicked.connect(self._go_to_dashboard)
+        self._logo.clicked.connect(lambda: self.navigate.emit(Page.DASHBOARD))
 
         self._nav_item = NavItem(self)
         self._nav_item.itemClicked.connect(self._on_nav_item_clicked)
@@ -70,11 +68,9 @@ class Sidebar(QtWidgets.QFrame):
         layout.addWidget(Separator(self))
         layout.addWidget(self._nav_item)
 
-        self._go_to_dashboard()
-
     def _on_nav_item_clicked(self, item: QtWidgets.QListWidgetItem) -> None:
-        self.navigate.emit(item.text().lower())
+        self.navigate.emit(Page(item.text()))
 
-    def _go_to_dashboard(self) -> None:
-        self._nav_item.setCurrentItem(self._nav_item.item(0))
-        self.navigate.emit("dashboard")
+    def set_current_page(self, page: Page) -> None:
+        item = self._nav_item.findItems(page, QtCore.Qt.MatchFlag.MatchExactly)[0]
+        self._nav_item.setCurrentItem(item)

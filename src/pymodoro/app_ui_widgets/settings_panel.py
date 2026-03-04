@@ -5,16 +5,16 @@ from dataclasses import dataclass
 from loguru import logger
 from pydantic import ValidationError
 
-from pymodoro.settings import (
-    AppSettings,
-    save_settings,
-)
-from pymodoro.settings_ui_widgets import (
+from pymodoro.app_ui_widgets.settings_panel_widgets import (
     DurationSelectionDialog,
     NotificationsSectionWidget,
     PromptsSectionWidget,
     SessionSectionWidget,
     TimersSectionWidget,
+)
+from pymodoro.settings import (
+    AppSettings,
+    save_settings,
 )
 from pymodoro.tray import PauseUntilDialog
 
@@ -24,7 +24,9 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFrame,
+    QHBoxLayout,
     QMessageBox,
+    QPushButton,
     QScrollArea,
     QVBoxLayout,
     QWidget,
@@ -85,6 +87,8 @@ class SettingsPanel(QWidget):
             notification_sound_enabled=self._draft.notification_sound_enabled,
             parent=self,
         )
+        self._save_button = QPushButton("Save")
+        self._reset_button = QPushButton("Reset")
 
         self._session_group.pauseResumeClicked.connect(self._on_pause_resume_clicked)
         self._session_group.startWorkClicked.connect(self._on_start_work_clicked)
@@ -92,26 +96,26 @@ class SettingsPanel(QWidget):
         self._timers_group.changed.connect(self._mark_dirty)
         self._prompts_group.changed.connect(self._mark_dirty)
         self._notifications_group.changed.connect(self._mark_dirty)
+        self._save_button.clicked.connect(self._save_settings)
+        self._reset_button.clicked.connect(self._reload_ui_from_settings)
 
-        self._button_box = QDialogButtonBox(StandardButton.Save | StandardButton.Cancel)
-        self._button_box.accepted.connect(self._on_save)
-        self._button_box.rejected.connect(self._on_cancel)
-
-        content = QWidget()
+        content = QWidget(self)
         layout = QVBoxLayout(content)
         layout.addWidget(self._session_group)
         layout.addWidget(self._timers_group)
         layout.addWidget(self._notifications_group)
         layout.addWidget(self._prompts_group)
-        layout.addWidget(self._button_box)
+        button_layout = QHBoxLayout(content)
+        button_layout.addWidget(self._reset_button)
+        button_layout.addStretch()
+        button_layout.addWidget(self._save_button)
+        layout.addLayout(button_layout)
 
         scroll = QScrollArea(self)
         scroll.setWidget(content)
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(
-            QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff
-        )
+        scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAsNeeded)
 
         root = QVBoxLayout(self)
         root.addWidget(scroll)
@@ -137,20 +141,21 @@ class SettingsPanel(QWidget):
         """Return True if it's OK to leave (no dirty, or user saved/discarded)."""
         if not self._dirty:
             return True
-        result = self._confirm_close_for_dirty_state()
-        if result == QMessageBox.StandardButton.Cancel:
-            return False
-        if result == QMessageBox.StandardButton.Save and not self._try_save():
-            return False
-        self._dirty = False
-        return True
+        match self._confirm_close_for_dirty_state():
+            case QMessageBox.StandardButton.Save:
+                return self._save_settings()
+            case QMessageBox.StandardButton.Cancel:
+                return False
+            case QMessageBox.StandardButton.Discard:
+                return True
+            case _:
+                return False
 
     def _prompt_pause_until(self) -> QtCore.QDateTime | None:
         default_datetime = QtCore.QDateTime.currentDateTime().addSecs(3600)
         dialog = PauseUntilDialog(default_datetime, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             return dialog.selected_datetime()
-        return None
 
     def _on_pause_resume_clicked(self) -> None:
         if self._is_paused:
@@ -164,7 +169,6 @@ class SettingsPanel(QWidget):
         dialog = DurationSelectionDialog(title, default_seconds, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             return dialog.value()
-        return None
 
     def _on_start_work_clicked(self) -> None:
         seconds = self._prompt_duration(
@@ -191,30 +195,27 @@ class SettingsPanel(QWidget):
             message = f"{message} ({err['ctx']})"
         QMessageBox.critical(self, "Validation Error", str(message))
 
-    def _try_save(self) -> bool:
+    def _save_settings(self) -> bool:
+        if self._validate_settings():
+            save_settings(self._settings)
+            self._draft = SettingsDraft.from_settings(self._settings)
+            self._dirty = False
+            self.settingsSaved.emit()
+            return True
+        return False
+
+    def _validate_settings(self) -> bool:
         try:
             timers = self._timers_group.to_timers_settings()
             check_in_prompts = self._prompts_group.prompts_editor.get_prompts()
+            sound_enabled = self._notifications_group.is_sound_enabled()
         except ValidationError as error:
             self._show_validation_error(error)
             return False
-
-        sound_enabled = self._notifications_group.is_sound_enabled()
-
         self._settings.timers = timers
         self._settings.check_in.prompts = check_in_prompts
         self._settings.notification_sound_enabled = sound_enabled
-        save_settings(self._settings)
-        self._draft = SettingsDraft.from_settings(self._settings)
-        self._dirty = False
-        self.settingsSaved.emit()
         return True
-
-    def _on_save(self) -> None:
-        self._try_save()
-
-    def _on_cancel(self) -> None:
-        self._reload_ui_from_settings()
 
     def _reload_ui_from_settings(self) -> None:
         """Revert UI to last saved settings (e.g. on Cancel)."""

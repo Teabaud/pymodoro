@@ -7,7 +7,7 @@ from PySide6 import QtCore
 
 import pymodoro.tray as tray_module
 from pymodoro.session import SessionPhase
-from pymodoro.tray import TrayController
+from pymodoro.tray import ActivationReason, TrayController
 
 
 class DummySignal:
@@ -50,9 +50,6 @@ class DummyMenu:
 
 
 class DummyTray:
-    ActivationReason = SimpleNamespace(Trigger="trigger")
-    MessageIcon = SimpleNamespace(Information="info", NoIcon="none")
-
     def __init__(self, app: Any) -> None:
         self.app = app
         self.activated = DummySignal()
@@ -239,7 +236,7 @@ def test_tray_activation_requests_open_settings(
     opened: list[bool] = []
     tray.openSettingsRequested.connect(lambda: opened.append(True))
 
-    tray._on_tray_activated(DummyTray.ActivationReason.Trigger)
+    tray._on_tray_activated(ActivationReason.Trigger)
 
     assert opened == [True]
 

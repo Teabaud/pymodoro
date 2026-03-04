@@ -1,7 +1,10 @@
+from typing import cast
+
 from loguru import logger
 from PySide6 import QtCore, QtWidgets
 
 from pymodoro.app_ui_widgets.dashboard import Dashboard
+from pymodoro.app_ui_widgets.pages import Page
 from pymodoro.app_ui_widgets.settings_panel import SettingsPanel
 from pymodoro.app_ui_widgets.sidebar import Sidebar
 from pymodoro.settings import AppSettings
@@ -11,11 +14,13 @@ from pymodoro.tray import get_app_icon
 class MainArea(QtWidgets.QFrame):
     def __init__(self, settings: AppSettings, parent=None):
         super().__init__(parent)
+        self._page_widgets: dict[Page, QtWidgets.QWidget] = {
+            Page.DASHBOARD: Dashboard(self),
+            Page.SETTINGS: SettingsPanel(settings, self),
+        }
+
         self._stack = QtWidgets.QStackedWidget(self)
-        self._dashboard = Dashboard(self)
-        self._settings_panel = SettingsPanel(settings, self)
-        self._stack.addWidget(self._dashboard)
-        self._stack.addWidget(self._settings_panel)
+        [self._stack.addWidget(widget) for widget in self._page_widgets.values()]
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -29,16 +34,18 @@ class MainArea(QtWidgets.QFrame):
             }
         """)
 
-    def show_dashboard(self) -> None:
-        if (
-            self._settings_panel.has_unsaved_changes()
-            and not self._settings_panel.prepare_leave()
-        ):
-            return
-        self._stack.setCurrentWidget(self._dashboard)
+    @property
+    def settings_panel(self) -> SettingsPanel:
+        return cast(SettingsPanel, self._page_widgets[Page.SETTINGS])
 
-    def show_settings(self) -> None:
-        self._stack.setCurrentWidget(self._settings_panel)
+    def settings_unsaved(self) -> bool:
+        return (
+            self.settings_panel.has_unsaved_changes()
+            and not self.settings_panel.prepare_leave()
+        )
+
+    def show_page(self, page: Page) -> None:
+        self._stack.setCurrentWidget(self._page_widgets[page])
 
 
 class AppWindow(QtWidgets.QMainWindow):
@@ -68,28 +75,27 @@ class AppWindow(QtWidgets.QMainWindow):
         root.setSpacing(0)
 
         self._sidebar = Sidebar(container)
-        self._sidebar.navigate.connect(self._on_sidebar_navigate)
+        self._sidebar.navigate.connect(self.navigate_to_page)
 
         self._main_area = MainArea(self._settings, container)
 
         root.addWidget(self._sidebar)
         root.addWidget(self._main_area)
+        self.navigate_to_page(Page.DASHBOARD)
 
         self.setCentralWidget(container)
 
     def get_settings_panel(self) -> SettingsPanel:
-        return self._main_area._settings_panel
+        return cast(SettingsPanel, self._main_area._page_widgets[Page.SETTINGS])
 
-    # ---- Event handlers ---------------------------------------------------
-    def _on_sidebar_navigate(self, page: str) -> None:
-        match page:
-            case "dashboard":
-                self._main_area.show_dashboard()
-            case "settings":
-                self._main_area.show_settings()
-            case _:
-                logger.error(f"Unknown page: {page}")
-        logger.info(f"Navigating to {page}")
+    # ---- Navigation handlers ----------------------------------------------
+    def navigate_to_page(self, page: Page) -> None:
+        logger.info(f"Navigating to page: {page}")
+        if page != Page.SETTINGS and self._main_area.settings_unsaved():
+            logger.info("Settings unsaved, staying on current page")
+            page = Page.SETTINGS
+        self._sidebar.set_current_page(page)
+        self._main_area.show_page(page)
 
     # ---- State restoration ------------------------------------------------
     def restore_geometry(self):
