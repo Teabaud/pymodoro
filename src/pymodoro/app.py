@@ -97,7 +97,7 @@ class PomodoroApp(QtCore.QObject):
         previous_phase_duration: int,
     ) -> None:
         self._tray_controller.refresh()
-        self._tray_controller.hide_phase_warning_toast()
+        self._tray_controller.hide_phase_end_toast()
         if previous_phase == SessionPhase.BREAK and current_phase == SessionPhase.WORK:
             self._play_notification_sound()
         if self._app_window:
@@ -132,9 +132,7 @@ class PomodoroApp(QtCore.QObject):
     def _on_phase_ending_soon(self, phase: SessionPhase) -> None:
         if phase != SessionPhase.WORK:
             return
-        self._tray_controller.show_phase_warning_toast(
-            text=f"{phase.value} ending soon"
-        )
+        self._tray_controller.show_phase_end_toast(text=f"{phase.value} ending soon")
         self._play_notification_sound()
 
     def _on_snoozed_clicked(self) -> None:

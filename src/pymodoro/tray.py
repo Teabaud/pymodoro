@@ -8,6 +8,7 @@ from pymodoro.session import SessionPhase, SessionPhaseManager
 from PySide6 import QtCore, QtGui, QtWidgets
 
 ActivationReason = QtWidgets.QSystemTrayIcon.ActivationReason
+AlignVCenter = QtCore.Qt.AlignmentFlag.AlignVCenter
 
 _ICON_DIR = Path(__file__).resolve().parents[2] / "assets" / "icons"
 _PHASE_ICON_FILES = {
@@ -56,7 +57,7 @@ class TrayController(QtCore.QObject):
         self._update_timer.setInterval(1000)
         self._update_timer.timeout.connect(self.refresh)
         self._current_icon_phase: SessionPhase | None = None
-        self._phase_warning_toast: PhaseWarningToast | None = None
+        self._phase_end_toast: PhaseEndToast | None = None
 
     def show(self) -> None:
         self._tray.show()
@@ -85,12 +86,12 @@ class TrayController(QtCore.QObject):
         self._tray.setToolTip(tooltip_str)
         self._render_phase_icon(phase)
 
-    def show_phase_warning_toast(self, text: str) -> None:
-        self._ensure_phase_warning_toast().show_toast(text=text)
+    def show_phase_end_toast(self, text: str) -> None:
+        self._ensure_phase_end_toast().show_toast(text=text)
 
-    def hide_phase_warning_toast(self) -> None:
-        if self._phase_warning_toast is not None:
-            self._phase_warning_toast.hide_toast()
+    def hide_phase_end_toast(self) -> None:
+        if self._phase_end_toast is not None:
+            self._phase_end_toast.hide()
 
     def _prompt_pause_until(self) -> QtCore.QDateTime | None:
         default_datetime = QtCore.QDateTime.currentDateTime().addSecs(3600)
@@ -115,19 +116,21 @@ class TrayController(QtCore.QObject):
         if reason == ActivationReason.Trigger:
             self.openSettingsRequested.emit()
 
-    def _ensure_phase_warning_toast(self) -> PhaseWarningToast:
-        if self._phase_warning_toast is None:
-            self._phase_warning_toast = PhaseWarningToast(self)
-            self._phase_warning_toast.snoozeRequested.connect(self.snoozeRequested.emit)
-        return self._phase_warning_toast
+    def _ensure_phase_end_toast(self) -> PhaseEndToast:
+        if self._phase_end_toast is None:
+            self._phase_end_toast = PhaseEndToast(self)
+            self._phase_end_toast.snoozeRequested.connect(self.snoozeRequested.emit)
+            self._phase_end_toast.checkInRequested.connect(self.checkInRequested.emit)
+        return self._phase_end_toast
 
 
-class PhaseWarningToast(QtWidgets.QFrame):
+class PhaseEndToast(QtWidgets.QFrame):
     snoozeRequested = QtCore.Signal()
+    checkInRequested = QtCore.Signal()
 
     def __init__(self, parent: QtCore.QObject | None = None) -> None:
         super().__init__(None)
-        self.setObjectName("PhaseWarningToast")
+        self.setObjectName("PhaseEndToast")
         self.setWindowFlags(
             QtCore.Qt.WindowType.Tool
             | QtCore.Qt.WindowType.FramelessWindowHint
@@ -143,18 +146,19 @@ class PhaseWarningToast(QtWidgets.QFrame):
         text_font.setBold(True)
         text_font.setPointSize(text_font.pointSize() + 1)
         self._text_label.setFont(text_font)
+        self._check_in_button = QtWidgets.QPushButton("Check in", self)
+        self._check_in_button.clicked.connect(self.checkInRequested.emit)
+        self._check_in_button.clicked.connect(self.hide)
         self._snooze_button = QtWidgets.QPushButton("Snooze", self)
-        self._snooze_button.clicked.connect(self._on_snooze_clicked)
+        self._snooze_button.clicked.connect(self.snoozeRequested.emit)
+        self._snooze_button.clicked.connect(self.hide)
 
         content_layout = QtWidgets.QHBoxLayout()
         content_layout.setContentsMargins(14, 12, 14, 12)
         content_layout.setSpacing(14)
-        content_layout.addWidget(
-            self._text_label, 1, QtCore.Qt.AlignmentFlag.AlignVCenter
-        )
-        content_layout.addWidget(
-            self._snooze_button, 0, QtCore.Qt.AlignmentFlag.AlignVCenter
-        )
+        content_layout.addWidget(self._text_label, 1, AlignVCenter)
+        content_layout.addWidget(self._check_in_button, 0, AlignVCenter)
+        content_layout.addWidget(self._snooze_button, 0, AlignVCenter)
         self.setLayout(content_layout)
 
     def show_toast(self, text: str) -> None:
@@ -164,19 +168,10 @@ class PhaseWarningToast(QtWidgets.QFrame):
         self.show()
         self.raise_()
 
-    def hide_toast(self) -> None:
-        self.hide()
-
-    def _on_snooze_clicked(self) -> None:
-        self.snoozeRequested.emit()
-        self.hide_toast()
-
     def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
-        if not self._snooze_button.geometry().contains(event.pos()):
-            self.hide_toast()
-            event.accept()
-            return
         super().mousePressEvent(event)
+        self.hide()
+        event.accept()
 
     def _position_bottom_right(self) -> None:
         screen = QtWidgets.QApplication.primaryScreen()

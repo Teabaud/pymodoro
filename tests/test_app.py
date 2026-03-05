@@ -75,7 +75,7 @@ class DummyTrayController:
         self.refresh_called = False
         self.show_called = False
         self.toast_messages: list[dict[str, Any]] = []
-        self.hide_phase_warning_toast_called = 0
+        self.hide_phase_end_toast_called = 0
 
     def refresh(self) -> None:
         self.refresh_called = True
@@ -83,11 +83,11 @@ class DummyTrayController:
     def show(self) -> None:
         self.show_called = True
 
-    def show_phase_warning_toast(self, text: str) -> None:
+    def show_phase_end_toast(self, text: str) -> None:
         self.toast_messages.append({"text": text})
 
-    def hide_phase_warning_toast(self) -> None:
-        self.hide_phase_warning_toast_called += 1
+    def hide_phase_end_toast(self) -> None:
+        self.hide_phase_end_toast_called += 1
 
 
 class DummyPrompt:
@@ -332,6 +332,22 @@ def test_start_break_from_settings_starts_break(
     assert phase_manager.start_break_phase_called == [12]
 
 
+def test_toast_check_in_opens_check_in_window(
+    monkeypatch: Any, settings: AppSettings
+) -> None:
+    monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
+    monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
+    monkeypatch.setattr(app_module, "CheckInScreen", DummyPrompt)
+
+    app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
+    tray_controller = cast(DummyTrayController, app._tray_controller)
+
+    tray_controller.checkInRequested.emit()
+
+    assert app._check_in_screen is not None
+    assert cast(DummyPrompt, app._check_in_screen).show_called == 1
+
+
 def test_work_phase_ending_warning_allows_tray_snooze(
     monkeypatch: Any, settings: AppSettings
 ) -> None:
@@ -385,9 +401,10 @@ def test_non_work_phase_warning_does_not_show_message(
     assert sound_player.play_calls == 0
 
 
-def test_phase_change_hides_warning_toast_on_phase_change(
+def test_phase_change_hides_warning_toast(
     monkeypatch: Any, settings: AppSettings
 ) -> None:
+    """When a new phase starts, the phase-end toast is hidden."""
     monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
     monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
     monkeypatch.setattr(app_module, "CheckInScreen", DummyPrompt)
@@ -403,7 +420,7 @@ def test_phase_change_hides_warning_toast_on_phase_change(
 
     app._sp_manager.phaseChanged.emit(SessionPhase.WORK, SessionPhase.BREAK, 120)
 
-    assert tray_controller.hide_phase_warning_toast_called == 1
+    assert tray_controller.hide_phase_end_toast_called == 1
     assert sound_player.play_calls == 0
 
 
