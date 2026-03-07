@@ -40,7 +40,7 @@ class PomodoroApp(QtCore.QObject):
 
         self._check_in_screen: CheckInScreen | None = None
         self._app_window: AppWindow | None = None
-        self._notification_sound_player = NotificationSoundPlayer(self)
+        self._notification_sound_player = NotificationSoundPlayer()
         self._awaiting_check_in_close: bool = False
 
         self._sp_manager = SessionPhaseManager(settings=settings)
