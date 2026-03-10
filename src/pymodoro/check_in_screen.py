@@ -8,6 +8,7 @@ from pymodoro.check_in_screen_widgets import (
     PromptCard,
 )
 from pymodoro.metrics_logger import CheckInSubmission
+from pymodoro.settings import AppSettings
 from pymodoro.tray import get_app_icon
 
 STYLESHEET = """
@@ -43,9 +44,11 @@ class CheckInScreen(QtWidgets.QDialog):
     def __init__(
         self,
         check_in_prompt: str,
+        settings: AppSettings | None = None,
         parent: QtWidgets.QWidget | None = None,
     ) -> None:
         super().__init__(parent)
+        self._settings = settings
         self.setWindowFlags(
             QtCore.Qt.WindowType.Window
             | QtCore.Qt.WindowType.FramelessWindowHint
@@ -55,7 +58,8 @@ class CheckInScreen(QtWidgets.QDialog):
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_ShowWithoutActivating, False)
         self.setWindowIcon(get_app_icon())
 
-        self._prompt_card = PromptCard(check_in_prompt, self)
+        prompts = settings.check_in.prompts if settings is not None else []
+        self._prompt_card = PromptCard(check_in_prompt, prompts=prompts, parent=self)
         self._focus_rating_widget = FocusRatingWidget(self)
         self._exercise_widget = ExerciseWidget(self)
         self._submit_button = QtWidgets.QPushButton("Submit", self)

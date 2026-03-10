@@ -94,6 +94,7 @@ class DummySnackbar:
     def __init__(self, *_: Any, **__: Any) -> None:
         self.snoozeRequested = DummySignal()
         self.checkInRequested = DummySignal()
+        self.startBreakRequested = DummySignal()
         self.show_calls: list[str] = []
         self.hide_calls = 0
 

@@ -68,6 +68,7 @@ class DummyTrayController:
         self.openAppRequested = DummySignal()
         self.openSettingsRequested = DummySignal()
         self.checkInRequested = DummySignal()
+        self.startBreakRequested = DummySignal()
         self.pauseUntilRequested = DummySignal()
         self.snoozeRequested = DummySignal()
         self.resumeRequested = DummySignal()
@@ -734,3 +735,25 @@ def test_open_settings_panel_navigates_app_window_to_settings(
     app_window = cast(DummyAppWindow, app._app_window)
 
     assert app_window.last_navigated_page == Page.SETTINGS
+
+
+def test_show_check_in_window_passes_settings_to_screen(
+    monkeypatch: Any, settings: AppSettings
+) -> None:
+    monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
+    monkeypatch.setattr(app_module, "TrayController", DummyTrayController)
+
+    captured_kwargs: dict[str, Any] = {}
+
+    class SpyPrompt(DummyPrompt):
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            captured_kwargs.update(kwargs)
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(app_module, "CheckInScreen", SpyPrompt)
+
+    app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
+    app._show_check_in_window()
+
+    assert "settings" in captured_kwargs
+    assert captured_kwargs["settings"] is settings

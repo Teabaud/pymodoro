@@ -1,16 +1,127 @@
 from __future__ import annotations
 
-from PySide6 import QtCore
+from PySide6 import QtCore, QtGui
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QPlainTextEdit,
     QPushButton,
+    QSizePolicy,
     QSpinBox,
     QVBoxLayout,
     QWidget,
 )
+
+_OVERLAY_STYLESHEET = """
+    #PromptOverlay QPushButton {
+        font-size: 20px;
+        font-weight: 600;
+        padding: 18px 32px;
+        background: palette(button);
+        border: 1px solid palette(mid);
+        border-radius: 12px;
+        color: palette(button-text);
+        text-align: center;
+    }
+    #PromptOverlay QPushButton:hover {
+        background: palette(midlight);
+        border-color: palette(dark);
+    }
+    #PromptOverlay QPushButton:checked {
+        background: palette(highlight);
+        border-color: palette(highlight);
+        color: palette(highlighted-text);
+    }
+"""
+
+
+class _PromptOverlay(QWidget):
+    prompt_selected = QtCore.Signal(str)
+
+    def __init__(self, prompts: list[str], current: str, parent: QWidget) -> None:
+        super().__init__(parent)
+        self._prompts = prompts
+        self._highlighted = prompts.index(current) if current in prompts else 0
+        self._buttons: list[QPushButton] = []
+
+        self.setObjectName("PromptOverlay")
+        self.setStyleSheet(_OVERLAY_STYLESHEET)
+        self.setGeometry(parent.rect())
+        self._build_ui()
+        self.show()
+        self.raise_()
+        self.setFocus()
+
+    def paintEvent(self, event: QtGui.QPaintEvent) -> None:
+        painter = QtGui.QPainter(self)
+        bg = self.palette().color(QtGui.QPalette.ColorRole.Window)
+        bg.setAlpha(220)
+        painter.fillRect(self.rect(), bg)
+
+    def _build_ui(self) -> None:
+        outer = QVBoxLayout(self)
+        outer.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        outer.setContentsMargins(200, 60, 200, 60)
+        outer.setSpacing(0)
+
+        for i, prompt in enumerate(self._prompts):
+            btn = QPushButton(prompt, self)
+            btn.setCheckable(True)
+            btn.setAutoDefault(False)
+            btn.setDefault(False)
+            btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+            btn.clicked.connect(self._make_click_handler(i))
+            self._buttons.append(btn)
+            outer.addWidget(btn)
+            outer.addSpacing(10)
+
+        self._update_highlight()
+
+    def _make_click_handler(self, index: int):
+        def handler() -> None:
+            self.prompt_selected.emit(self._prompts[index])
+            self.close()
+        return handler
+
+    def _update_highlight(self) -> None:
+        for i, btn in enumerate(self._buttons):
+            btn.setChecked(i == self._highlighted)
+
+    def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
+        key = event.key()
+        if key == QtCore.Qt.Key.Key_Up:
+            self._highlighted = (self._highlighted - 1) % len(self._prompts)
+            self._update_highlight()
+        elif key == QtCore.Qt.Key.Key_Down:
+            self._highlighted = (self._highlighted + 1) % len(self._prompts)
+            self._update_highlight()
+        elif key in (QtCore.Qt.Key.Key_Return, QtCore.Qt.Key.Key_Enter):
+            self.prompt_selected.emit(self._prompts[self._highlighted])
+            self.close()
+        elif key == QtCore.Qt.Key.Key_Escape:
+            self.close()
+        else:
+            super().keyPressEvent(event)
+
+    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
+        if self.childAt(event.position().toPoint()) is None:
+            self.close()
+        else:
+            super().mousePressEvent(event)
+
+
+class _ClickableLabel(QLabel):
+    clicked = QtCore.Signal()
+
+    def __init__(self, text: str, parent: QWidget | None = None) -> None:
+        super().__init__(text, parent)
+        self.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor))
+
+    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
+        if event.button() == QtCore.Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
 
 
 class PromptCard(QWidget):
@@ -19,15 +130,19 @@ class PromptCard(QWidget):
     def __init__(
         self,
         prompt: str,
+        prompts: list[str] | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self._check_in_prompt = QLabel(prompt, self)
+        self._prompts = prompts or []
+
+        self._check_in_prompt = _ClickableLabel(prompt, self)
         self._check_in_prompt.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self._check_in_prompt.setWordWrap(True)
+        self._check_in_prompt.clicked.connect(self._on_prompt_clicked)
 
         self._input = QPlainTextEdit(self)
-        self._input.setPlaceholderText("Type your answer here...")
+        self._input.setPlaceholderText("Click on the question to select another one")
         self._input.setTabChangesFocus(True)
         self._input.setVisible(True)
 
@@ -36,6 +151,12 @@ class PromptCard(QWidget):
         layout.addSpacing(24)
         layout.addWidget(self._input)
         self.setLayout(layout)
+
+    def _on_prompt_clicked(self) -> None:
+        if not self._prompts:
+            return
+        overlay = _PromptOverlay(self._prompts, self._check_in_prompt.text(), self.window())
+        overlay.prompt_selected.connect(self._check_in_prompt.setText)
 
     def set_check_in_prompt(self, text: str) -> None:
         self._check_in_prompt.setText(text)

@@ -1,5 +1,5 @@
-from __future__ import annotations
-
+# import os
+# os.environ["QT_NO_GLIB"] = "1"
 import random
 
 from loguru import logger
@@ -56,6 +56,7 @@ class PomodoroApp(QtCore.QObject):
         self._tray_controller.quitRequested.connect(self._app.quit)
         self._tray_controller.openAppRequested.connect(self._open_app_window)
         self._tray_controller.checkInRequested.connect(self._show_check_in_window)
+        self._tray_controller.startBreakRequested.connect(self._on_start_break_from_toast)
         self._tray_controller.openSettingsRequested.connect(self._open_settings_panel)
 
         self._sp_manager.start()
@@ -105,12 +106,16 @@ class PomodoroApp(QtCore.QObject):
             settings_panel.set_paused(current_phase == SessionPhase.PAUSE)
         self._metrics_logger.log_phase_duration(previous_phase, previous_phase_duration)
 
+    def _on_start_break_from_toast(self) -> None:
+        self._sp_manager.start_break_phase()
+        self._show_check_in_window()
+
     def _show_check_in_window(self) -> None:
         if self._check_in_screen and self._check_in_screen.isVisible():
             return
         check_in_prompt = self._select_check_in_prompt()
         if self._check_in_screen is None:
-            self._check_in_screen = CheckInScreen(check_in_prompt=check_in_prompt)
+            self._check_in_screen = CheckInScreen(check_in_prompt=check_in_prompt, settings=self._settings)
             self._check_in_screen.submitted.connect(self._on_check_in_screen_submit)
             self._check_in_screen.finished.connect(self._on_check_in_finished)
         else:

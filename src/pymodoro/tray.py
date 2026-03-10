@@ -26,6 +26,7 @@ class TrayController(QtCore.QObject):
     openAppRequested = QtCore.Signal()
     openSettingsRequested = QtCore.Signal()
     checkInRequested = QtCore.Signal()
+    startBreakRequested = QtCore.Signal()
     pauseUntilRequested = QtCore.Signal(object)
     snoozeRequested = QtCore.Signal()
     resumeRequested = QtCore.Signal()
@@ -121,12 +122,14 @@ class TrayController(QtCore.QObject):
             self._phase_end_toast = PhaseEndToast(self)
             self._phase_end_toast.snoozeRequested.connect(self.snoozeRequested.emit)
             self._phase_end_toast.checkInRequested.connect(self.checkInRequested.emit)
+            self._phase_end_toast.startBreakRequested.connect(self.startBreakRequested.emit)
         return self._phase_end_toast
 
 
 class PhaseEndToast(QtWidgets.QFrame):
     snoozeRequested = QtCore.Signal()
     checkInRequested = QtCore.Signal()
+    startBreakRequested = QtCore.Signal()
 
     def __init__(self, parent: QtCore.QObject | None = None) -> None:
         super().__init__(None)
@@ -146,8 +149,8 @@ class PhaseEndToast(QtWidgets.QFrame):
         text_font.setBold(True)
         text_font.setPointSize(text_font.pointSize() + 1)
         self._text_label.setFont(text_font)
-        self._check_in_button = QtWidgets.QPushButton("Check in", self)
-        self._check_in_button.clicked.connect(self.checkInRequested.emit)
+        self._check_in_button = QtWidgets.QPushButton("Start break", self)
+        self._check_in_button.clicked.connect(self.startBreakRequested.emit)
         self._check_in_button.clicked.connect(self.hide)
         self._snooze_button = QtWidgets.QPushButton("Snooze", self)
         self._snooze_button.clicked.connect(self.snoozeRequested.emit)
