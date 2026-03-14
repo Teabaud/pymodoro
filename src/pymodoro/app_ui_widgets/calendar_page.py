@@ -404,6 +404,11 @@ class CalendarGridView(QtWidgets.QWidget):
         self._timer.timeout.connect(self._update_time_indicator)
         self._timer.start(60_000)
 
+        # Install event filter to dismiss tooltip on window deactivation
+        app = QtWidgets.QApplication.instance()
+        if app:
+            app.installEventFilter(self)
+
     # ---- Public API -------------------------------------------------------
 
     def set_data(self, blocks: list[SessionBlock], week_start: date) -> None:
@@ -609,6 +614,15 @@ class CalendarGridView(QtWidgets.QWidget):
         self._active_tooltip.show_at(global_pos)
 
     # ---- Events -----------------------------------------------------------
+
+    def eventFilter(self, obj: QtCore.QObject, event: QtCore.QEvent) -> bool:
+        if event.type() == QtCore.QEvent.Type.WindowDeactivate:
+            self._dismiss_tooltip()
+        return False
+
+    def hideEvent(self, event: QtGui.QHideEvent) -> None:
+        self._dismiss_tooltip()
+        super().hideEvent(event)
 
     def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
         super().resizeEvent(event)
