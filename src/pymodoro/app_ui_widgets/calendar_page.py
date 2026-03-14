@@ -1,702 +1,825 @@
 from __future__ import annotations
 
-from datetime import date, datetime, time, timedelta
+import math
+from dataclasses import dataclass
+from datetime import date, datetime, time, timedelta, timezone
+from typing import Sequence
 
+from loguru import logger
 from PySide6 import QtCore, QtGui, QtWidgets
-from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, Qt
-from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
-from PySide6.QtWidgets import QGraphicsScene, QGraphicsView, QGraphicsItem, QGraphicsEllipseItem, QGraphicsPathItem, QGraphicsLineItem, QGraphicsRectItem, QGraphicsTextItem
 
-from pymodoro.metrics_reader import CheckInRecord, MetricsReader, SessionDurationRecord
+from pymodoro.metrics_io import (
+    CheckInRecord,
+    SessionBlock,
+    SessionDurationRecord,
+    read_records,
+)
 from pymodoro.settings import AppSettings
 
+# ---------------------------------------------------------------------------
+# Configurable constants (§3.9)
+# ---------------------------------------------------------------------------
 
-_DAY_ABBR = ("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")  # weekday() 0=Mon
+CALENDAR_CONSTANTS = {
+    "CARD_MIN_HEIGHT_PX": 6,
+    "CARD_LABEL_FULL_HEIGHT_PX": 40,
+    "CARD_LABEL_COMPACT_HEIGHT_PX": 20,
+    "CHECKIN_WINDOW_MINUTES": 15,
+    "DEFAULT_RANGE_START": time(9, 0),
+    "DEFAULT_RANGE_STOP": time(20, 0),
+    "MIN_RANGE_START": time(9, 0),
+    "MIN_RANGE_STOP": time(20, 0),
+    "AUTOFIT_PADDING_MINUTES": 30,
+    "CURRENT_TIME_COLOR": "#eb4034",
+}
 
+CC = CALENDAR_CONSTANTS  # shorthand
 
-def _accent(palette: QtGui.QPalette) -> QColor:
-    return palette.color(QtGui.QPalette.ColorRole.Highlight)
-
-
-def _alpha_hex(color: QColor, alpha: int) -> str:
-    """Return color as #AARRGGBB hex string with the given alpha (0–255)."""
-    c = QColor(color)
-    c.setAlpha(alpha)
-    return c.name(QColor.NameFormat.HexArgb)
-
-
-def _time_frac(t: time) -> float:
-    """Return time as fractional hours (e.g. 14:30 → 14.5)."""
-    return t.hour + t.minute / 60.0
-
-
-
-
-# ─── Custom Graphics Items ────────────────────────────────────────────────────
-
-class SessionCard(QGraphicsPathItem):
-    """A session card rendered as a rounded rectangle with tooltip."""
-
-    def __init__(self, path: QPainterPath, duration_min: int, start_time: time, end_time: time, parent=None):
-        super().__init__(path, parent)
-        self.duration_min = duration_min
-        self.start_time = start_time
-        self.end_time = end_time
-        self.setAcceptHoverEvents(True)
-        self._update_tooltip()
-
-    def _update_tooltip(self) -> None:
-        tooltip = f"Work — {self.duration_min} min\n{self.start_time.strftime('%H:%M')} → {self.end_time.strftime('%H:%M')}"
-        self.setToolTip(tooltip)
-
-    def hoverEnterEvent(self, event) -> None:
-        # Increase opacity on hover
-        brush = self.brush()
-        color = brush.color()
-        color.setAlpha(min(255, color.alpha() + 30))
-        self.setBrush(color)
-        super().hoverEnterEvent(event)
-
-    def hoverLeaveEvent(self, event) -> None:
-        # Restore original opacity
-        brush = self.brush()
-        color = brush.color()
-        color.setAlpha(max(0, color.alpha() - 30))
-        self.setBrush(color)
-        super().hoverLeaveEvent(event)
+# ---------------------------------------------------------------------------
+# Layer 2 — SessionBlockBuilder
+# ---------------------------------------------------------------------------
 
 
-class CheckInDot(QGraphicsEllipseItem):
-    """A check-in marker rendered as a small circle with tooltip."""
+def build_session_blocks(
+    records: Sequence[SessionDurationRecord | CheckInRecord],
+) -> list[SessionBlock]:
+    """Build Work-only SessionBlocks with associated check-ins, sorted by start."""
+    sessions: list[SessionDurationRecord] = []
+    check_ins: list[CheckInRecord] = []
+    for r in records:
+        if isinstance(r, SessionDurationRecord):
+            sessions.append(r)
+        elif isinstance(r, CheckInRecord):
+            check_ins.append(r)
 
-    def __init__(self, check_time: time, parent=None):
-        super().__init__(parent)
-        self.check_time = check_time
-        self.setAcceptHoverEvents(True)
-        self._update_tooltip()
-
-    def _update_tooltip(self) -> None:
-        self.setToolTip(f"Check-in at {self.check_time.strftime('%H:%M')}")
-
-    def hoverEnterEvent(self, event) -> None:
-        # Increase size on hover
-        brush = self.brush()
-        color = brush.color()
-        color.setAlpha(min(255, color.alpha() + 30))
-        self.setBrush(color)
-        super().hoverEnterEvent(event)
-
-    def hoverLeaveEvent(self, event) -> None:
-        # Restore original opacity
-        brush = self.brush()
-        color = brush.color()
-        color.setAlpha(max(0, color.alpha() - 30))
-        self.setBrush(color)
-        super().hoverLeaveEvent(event)
-
-
-# ─── CalWeekHeader ────────────────────────────────────────────────────────────
-
-class CalWeekHeader(QtWidgets.QWidget):
-    """Fixed header showing day abbreviations and date numbers."""
-    HEADER_H = 60
-    TIME_COL_W = 52
-
-    def __init__(self, parent=None) -> None:
-        super().__init__(parent)
-        self.setFixedHeight(self.HEADER_H)
-        self._days: list[date] = []
-        self._col_w: float = 100.0
-
-    def set_days(self, days: list[date], col_w: float) -> None:
-        """Update the days to display and column width."""
-        self._days = days
-        self._col_w = col_w
-        self.update()
-
-    def paintEvent(self, event) -> None:
-        """Paint the header with day labels."""
-        if not self._days:
-            return
-
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        palette = self.palette()
-        fg = palette.color(QtGui.QPalette.ColorRole.WindowText)
-        bg = palette.color(QtGui.QPalette.ColorRole.Window)
-        accent = _accent(palette)
-        today = date.today()
-
-        # Background
-        painter.fillRect(self.rect(), bg)
-
-        # Bottom separator line
-        sep = QColor(fg)
-        sep.setAlpha(30)
-        painter.setPen(QtGui.QPen(sep, 1))
-        painter.drawLine(0, self.HEADER_H - 1, self.width(), self.HEADER_H - 1)
-
-        for i, d in enumerate(self._days):
-            cx = self.TIME_COL_W + i * self._col_w + self._col_w / 2
-            is_today = d == today
-
-            # Day abbreviation (MON, TUE, ...)
-            abbr_color = QColor(accent) if is_today else QColor(fg)
-            if not is_today:
-                abbr_color.setAlpha(160)
-            painter.setPen(abbr_color)
-            abbr_font = QFont(self.font())
-            abbr_font.setPointSize(max(7, self.font().pointSize() - 2))
-            abbr_font.setWeight(QtGui.QFont.Weight.Medium)
-            painter.setFont(abbr_font)
-            painter.drawText(cx - 20, 6, 40, 16, Qt.AlignmentFlag.AlignCenter, _DAY_ABBR[d.weekday()])
-
-            # Day number circle
-            num_font = QFont(self.font())
-            num_font.setPointSize(self.font().pointSize() + 1)
-            num_font.setWeight(QtGui.QFont.Weight.Bold)
-            painter.setFont(num_font)
-
-            circle_r = QtCore.QRect(cx - 14, 24, 28, 28)
-            if is_today:
-                painter.setPen(QtGui.QPen(Qt.PenStyle.NoPen))
-                painter.setBrush(accent)
-                painter.drawEllipse(circle_r)
-                painter.setPen(QColor("white"))
-            else:
-                num_color = QColor(fg)
-                num_color.setAlpha(80 if d.month != today.month else 210)
-                painter.setPen(num_color)
-                painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawText(circle_r, Qt.AlignmentFlag.AlignCenter, str(d.day))
-
-
-# ─── CalWeekGrid ──────────────────────────────────────────────────────────────
-
-class CalWeekGrid(QGraphicsView):
-    TIME_COL_W = 52
-    _DEFAULT_START = time(7, 0)
-    _DEFAULT_END = time(21, 0)
-    _PX_PER_HOUR = 40
-
-    def __init__(self, parent=None) -> None:
-        super().__init__(parent)
-        self._scene = QGraphicsScene(self)
-        self.setScene(self._scene)
-        self.setRenderHint(QPainter.RenderHint.Antialiasing)
-        self.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-
-        self._range_start = date.today()
-        self._range_end = date.today()
-        self._check_ins: list[CheckInRecord] = []
-        self._sessions: list[SessionDurationRecord] = []
-        self._t_start = self._DEFAULT_START
-        self._t_end = self._DEFAULT_END
-
-        self._current_time_line: QGraphicsLineItem | None = None
-        self._current_time_dot: QGraphicsEllipseItem | None = None
-        self._col_w: float = 100.0  # stored for timer updates
-        self._day_index: dict[date, int] = {}
-        self._days: list[date] = []  # stored for drawForeground
-
-        self.setSizePolicy(
-            QtWidgets.QSizePolicy.Policy.Expanding,
-            QtWidgets.QSizePolicy.Policy.Expanding,
+    # Build blocks for Work sessions only
+    blocks: list[SessionBlock] = []
+    for s in sessions:
+        if s.session_type != "Work":
+            continue
+        start = s.timestamp - timedelta(seconds=s.duration_sec)
+        blocks.append(
+            SessionBlock(start=start, end=s.timestamp, session_type=s.session_type)
         )
 
-        # Refresh current-time line every minute
-        self._timer = QtCore.QTimer(self)
-        self._timer.setInterval(60_000)
-        self._timer.timeout.connect(self._update_current_time_line_position)
-        self._timer.start()
+    blocks.sort(key=lambda b: b.start)
 
-    def set_data(
-        self,
-        range_start: date,
-        range_end: date,
-        check_ins: list[CheckInRecord],
-        sessions: list[SessionDurationRecord],
-    ) -> None:
-        self._range_start = range_start
-        self._range_end = range_end
-        self._check_ins = check_ins
-        self._sessions = sessions
-        self._t_start, self._t_end = self._compute_time_range()
-        self.updateGeometry()
-        self._rebuild_scene()
+    # Warn on overlapping windows
+    for i in range(len(blocks) - 1):
+        if blocks[i].end > blocks[i + 1].start:
+            logger.warning(
+                "Overlapping session blocks detected: {} and {}",
+                blocks[i],
+                blocks[i + 1],
+            )
 
-    def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
-        """Rebuild scene when view is resized to compute correct column widths."""
-        super().resizeEvent(event)
-        if self._days:
-            self._rebuild_scene()
+    # Associate check-ins
+    window = timedelta(minutes=CC["CHECKIN_WINDOW_MINUTES"])
+    check_ins_sorted = sorted(check_ins, key=lambda c: c.timestamp)
+    for ci in check_ins_sorted:
+        best_block: SessionBlock | None = None
+        best_dist: float | None = None
+        for block in blocks:
+            if block.start <= ci.timestamp <= block.end + window:
+                dist = abs((ci.timestamp - block.end).total_seconds())
+                if best_dist is None or dist < best_dist:
+                    best_block = block
+                    best_dist = dist
+        if best_block is not None:
+            best_block.check_ins.append(ci)
+        else:
+            logger.debug("Orphaned check-in at {}", ci.timestamp)
 
-    def _grid_height_for_range(self) -> int:
-        total_hours = _time_frac(self._t_end) - _time_frac(self._t_start)
-        if total_hours <= 0:
-            total_hours = 1.0
-        return int(total_hours * self._PX_PER_HOUR)
+    return blocks
 
-    def sizeHint(self) -> QtCore.QSize:
-        grid_h = self._grid_height_for_range()
-        width = self.TIME_COL_W + 7 * 80
-        return QtCore.QSize(width, grid_h)
 
-    def minimumSizeHint(self) -> QtCore.QSize:
-        return QtCore.QSize(self.TIME_COL_W + 7 * 40, 200)
+# ---------------------------------------------------------------------------
+# Layer 3 — CalendarDataProvider
+# ---------------------------------------------------------------------------
 
-    def _compute_time_range(self) -> tuple[time, time]:
-        hours: list[float] = []
-        for s in self._sessions:
-            if s.session_type.lower() != "work":
-                continue
-            if self._range_start <= s.timestamp.date() <= self._range_end:
-                hours.append(_time_frac(s.timestamp.time()))
-                start_dt = s.timestamp - timedelta(seconds=s.duration_sec)
-                if start_dt.date() == s.timestamp.date():
-                    hours.append(_time_frac(start_dt.time()))
-        for c in self._check_ins:
-            if self._range_start <= c.timestamp.date() <= self._range_end:
-                hours.append(_time_frac(c.timestamp.time()))
-        if not hours:
-            return self._DEFAULT_START, self._DEFAULT_END
 
-        start_h = max(0, min(8, int(min(hours)) - 1))
-        end_h = max(20, min(24, int(max(hours)) + 2))
-        t_end = time(23, 59) if end_h >= 24 else time(end_h, 0)
-        return time(start_h, 0), t_end
+@dataclass
+class CalendarDataProvider:
+    """Provides session blocks for a given week, converting UTC → local time."""
 
-    def days(self) -> list[date]:
-        result, d = [], self._range_start
-        while d <= self._range_end:
-            result.append(d)
-            d += timedelta(days=1)
+    _blocks: list[SessionBlock]
+
+    def __init__(self, blocks: list[SessionBlock]) -> None:
+        self._blocks = blocks
+
+    def get_week(self, week_start: date) -> list[SessionBlock]:
+        """Return session blocks for the 7-day window starting at week_start (local)."""
+        local_tz = datetime.now().astimezone().tzinfo
+        week_end = week_start + timedelta(days=7)
+
+        result: list[SessionBlock] = []
+        for b in self._blocks:
+            local_start = b.start.astimezone(local_tz)
+            local_end = b.end.astimezone(local_tz)
+            day = local_start.date()
+            if week_start <= day < week_end:
+                local_check_ins = []
+                for ci in b.check_ins:
+                    local_check_ins.append(
+                        CheckInRecord(
+                            timestamp=ci.timestamp.astimezone(local_tz),
+                            prompt=ci.prompt,
+                            answer=ci.answer,
+                            focus_rating=ci.focus_rating,
+                            exercise_name=ci.exercise_name,
+                            exercise_rep_count=ci.exercise_rep_count,
+                        )
+                    )
+                result.append(
+                    SessionBlock(
+                        start=local_start,
+                        end=local_end,
+                        session_type=b.session_type,
+                        check_ins=local_check_ins,
+                    )
+                )
         return result
 
-    def get_header_info(self) -> tuple[list[date], float]:
-        """Return the days and column width for the header to align with grid."""
-        return self._days, self._col_w
 
-    def _y_for_hour(self, hour_frac: float, grid_h: float) -> float:
-        """Convert fractional hour to scene y-coordinate (float)."""
-        total = _time_frac(self._t_end) - _time_frac(self._t_start)
-        frac = (hour_frac - _time_frac(self._t_start)) / total
-        return frac * grid_h
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
-    def _y_for_time(self, t: time, grid_h: float) -> float:
-        """Convert time to scene y-coordinate (float)."""
-        return self._y_for_hour(_time_frac(t), grid_h)
 
-    # ── Scene building ────────────────────────────────────────────────────────
+def _week_start_for_date(d: date) -> date:
+    """Return Monday of the week containing d, respecting locale via Qt."""
+    qt_first = QtCore.QLocale().firstDayOfWeek()
+    # Qt DayOfWeek: Monday=1 .. Sunday=7; Python isoweekday: Monday=1 .. Sunday=7
+    first_iso = qt_first.value
+    diff = (d.isoweekday() - first_iso) % 7
+    return d - timedelta(days=diff)
 
-    def _rebuild_scene(self) -> None:
-        """Rebuild the entire scene from scratch."""
-        self._scene.clear()
-        self._current_time_line = None
-        self._current_time_dot = None
 
-        palette = self.palette()
-        fg = palette.color(QtGui.QPalette.ColorRole.WindowText)
-        accent = _accent(palette)
+def _time_to_minutes(t: time) -> float:
+    return t.hour * 60 + t.minute + t.second / 60
+
+
+def _dt_to_minutes(dt: datetime) -> float:
+    return dt.hour * 60 + dt.minute + dt.second / 60
+
+
+# ---------------------------------------------------------------------------
+# QGraphicsScene items
+# ---------------------------------------------------------------------------
+
+
+class SessionCardItem(QtWidgets.QGraphicsRectItem):
+    """A session block rendered as a rounded-rect card."""
+
+    def __init__(
+        self,
+        block: SessionBlock,
+        x: float,
+        y: float,
+        w: float,
+        h: float,
+        parent: QtWidgets.QGraphicsItem | None = None,
+    ) -> None:
+        super().__init__(x, y, w, h, parent)
+        self.block = block
+        palette = QtWidgets.QApplication.palette()
+        self._base_color = palette.color(QtGui.QPalette.ColorRole.Highlight)
+        self._text_color = palette.color(QtGui.QPalette.ColorRole.HighlightedText)
+        self._hover = False
+        self.setAcceptHoverEvents(True)
+        self.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        self.setPen(QtGui.QPen(QtCore.Qt.PenStyle.NoPen))
+        self.setBrush(self._base_color)
+
+    def paint(
+        self,
+        painter: QtGui.QPainter,
+        option: QtWidgets.QStyleOptionGraphicsItem,
+        widget: QtWidgets.QWidget | None = None,
+    ) -> None:
+        rect = self.rect()
+        color = self._base_color.lighter(115) if self._hover else self._base_color
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+        painter.setPen(QtCore.Qt.PenStyle.NoPen)
+        painter.setBrush(color)
+        painter.drawRoundedRect(rect, 4, 4)
+
+        # Check-in dot
+        if self.block.check_ins:
+            dot_r = 3.5
+            dot_x = rect.right() - dot_r - 4
+            dot_y = rect.top() + dot_r + 4
+            painter.setBrush(self._text_color)
+            painter.drawEllipse(QtCore.QPointF(dot_x, dot_y), dot_r, dot_r)
+
+        # Labels
+        h = rect.height()
+        painter.setPen(self._text_color)
+        duration_min = (
+            int(self.block.end.timestamp() - self.block.start.timestamp()) // 60
+        )
+        if h >= CC["CARD_LABEL_FULL_HEIGHT_PX"]:
+            font = painter.font()
+            font.setPixelSize(11)
+            font.setBold(True)
+            painter.setFont(font)
+            text_rect = rect.adjusted(5, 3, -14, 0)
+            painter.drawText(
+                text_rect,
+                QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignTop,
+                "Work",
+            )
+            font.setBold(False)
+            painter.setFont(font)
+            painter.drawText(
+                text_rect.adjusted(0, 14, 0, 0),
+                QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignTop,
+                f"{duration_min}m",
+            )
+        elif h >= CC["CARD_LABEL_COMPACT_HEIGHT_PX"]:
+            font = painter.font()
+            font.setPixelSize(10)
+            painter.setFont(font)
+            painter.drawText(
+                rect.adjusted(4, 1, -4, -1),
+                QtCore.Qt.AlignmentFlag.AlignLeft
+                | QtCore.Qt.AlignmentFlag.AlignVCenter,
+                f"Work {duration_min}m",
+            )
+
+    def hoverEnterEvent(self, event: QtWidgets.QGraphicsSceneHoverEvent) -> None:
+        self._hover = True
+        self.update()
+
+    def hoverLeaveEvent(self, event: QtWidgets.QGraphicsSceneHoverEvent) -> None:
+        self._hover = False
+        self.update()
+
+
+class CurrentTimeIndicator(QtWidgets.QGraphicsLineItem):
+    """Red horizontal line indicating the current time."""
+
+    def __init__(self, parent: QtWidgets.QGraphicsItem | None = None) -> None:
+        super().__init__(parent)
+        color = QtGui.QColor(CC["CURRENT_TIME_COLOR"])
+        pen = QtGui.QPen(color, 2)
+        self.setPen(pen)
+        self._dot = QtWidgets.QGraphicsEllipseItem(-3, -3, 6, 6, self)
+        self._dot.setBrush(color)
+        self._dot.setPen(QtGui.QPen(QtCore.Qt.PenStyle.NoPen))
+
+    def setLine(self, *args: float) -> None:  # type: ignore[override]
+        super().setLine(*args)
+        line = self.line()
+        self._dot.setPos(line.p1().x(), line.p1().y())
+
+
+# ---------------------------------------------------------------------------
+# CalendarGridView — the main graphics-based calendar widget
+# ---------------------------------------------------------------------------
+
+# Layout constants
+LEFT_MARGIN = 50  # width for hour labels
+TOP_HEADER = 50  # height for day headers
+HOUR_HEIGHT = 60  # pixels per hour
+
+
+class _DayHeaderWidget(QtWidgets.QWidget):
+    """Fixed header showing day abbreviations and numbers, aligned with grid columns."""
+
+    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._week_start: date = date.today()
+        self._day_count = 7
+        self._left_margin = LEFT_MARGIN
+        self.setFixedHeight(TOP_HEADER)
+
+    def set_week(self, week_start: date) -> None:
+        self._week_start = week_start
+        self.update()
+
+    def paintEvent(self, event: QtGui.QPaintEvent) -> None:
+        painter = QtGui.QPainter(self)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+
+        w = self.width()
+        col_w = (w - self._left_margin) / self._day_count
+
+        palette = QtWidgets.QApplication.palette()
+        text_color = palette.color(QtGui.QPalette.ColorRole.WindowText)
         today = date.today()
 
-        day_list = self.days()
-        ndays = len(day_list)
-        if ndays == 0:
-            return
+        for i in range(self._day_count):
+            d = self._week_start + timedelta(days=i)
+            x = self._left_margin + i * col_w
+            is_today = d == today
 
-        # Store days for drawForeground
-        self._days = day_list
+            # Day abbreviation
+            abbr = d.strftime("%a").upper()
+            abbr_font = QtGui.QFont(painter.font())
+            abbr_font.setPixelSize(11)
+            abbr_font.setBold(is_today)
+            painter.setFont(abbr_font)
+            abbr_color = (
+                palette.color(QtGui.QPalette.ColorRole.Highlight)
+                if is_today
+                else text_color
+            )
+            painter.setPen(abbr_color)
+            abbr_rect = painter.fontMetrics().boundingRect(abbr)
+            abbr_x = x + col_w / 2 - abbr_rect.width() / 2
+            painter.drawText(int(abbr_x), 16, abbr)
 
-        # Compute grid dimensions from actual viewport width
-        vw = self.viewport().width()
-        grid_w = max(vw - self.TIME_COL_W, ndays * 60)  # min 60px/col
-        grid_h = self._grid_height_for_range()
-        self._col_w = grid_w / ndays
-        self._day_index = {d: i for i, d in enumerate(day_list)}
+            # Day number
+            day_str = str(d.day)
+            day_font = QtGui.QFont(painter.font())
+            day_font.setPixelSize(14)
+            day_font.setBold(True)
+            painter.setFont(day_font)
+            fm = painter.fontMetrics()
+            day_br = fm.boundingRect(day_str)
+            cx = x + col_w / 2
+            cy = 34
 
-        # Set scene rect
-        self._scene.setSceneRect(0, 0, self.TIME_COL_W + grid_w, grid_h)
-
-        # Add background tint for today
-        self._add_today_tint(accent, today, self._day_index, self._col_w, grid_h)
-
-        # Add hour grid lines and labels
-        self._add_hour_grid(fg, grid_h, self._col_w, grid_w)
-
-        # Add column separators
-        self._add_column_separators(fg, ndays, self._col_w, grid_h)
-
-        # Add session cards
-        self._add_session_cards(fg, accent, day_list, self._day_index, self._col_w, grid_h)
-
-        # Add check-in dots
-        self._add_check_in_dots(accent, self._day_index, self._col_w, grid_h)
-
-        # Add current-time line
-        self._add_current_time_line(accent, self._day_index, self._col_w, grid_h)
-
-        # Add empty state if needed
-        self._add_empty_state(fg, grid_w, grid_h)
-
-    def _add_today_tint(self, accent: QColor, today: date, day_index: dict[date, int], col_w: float, grid_h: int) -> None:
-        if today not in day_index:
-            return
-        tint = QColor(accent)
-        tint.setAlpha(18)
-        col_i = day_index[today]
-        x = self.TIME_COL_W + col_i * col_w
-        rect = self._scene.addRect(x, 0, col_w, grid_h, pen=QtGui.QPen(Qt.PenStyle.NoPen), brush=QtGui.QBrush(tint))
-        rect.setZValue(-1)
-
-    def _add_hour_grid(self, fg: QColor, grid_h: int, col_w: float, grid_w: float) -> None:
-        grid_color = QColor(fg)
-        grid_color.setAlpha(18)
-        half_color = QColor(fg)
-        half_color.setAlpha(8)
-
-        hour_font = QFont(self.font())
-        hour_font.setPointSize(max(7, self.font().pointSize() - 2))
-        dim_fg = QColor(fg)
-        dim_fg.setAlpha(100)
-
-        total_hours = _time_frac(self._t_end) - _time_frac(self._t_start)
-
-        for hour in range(self._t_start.hour, self._t_end.hour + 1):
-            y = self._y_for_hour(float(hour), grid_h)
-
-            # Solid hour line
-            pen = QtGui.QPen(grid_color, 1)
-            self._scene.addLine(self.TIME_COL_W, y, self.TIME_COL_W + grid_w, y, pen)
-
-            if hour < self._t_end.hour:
-                # Hour label
-                text = self._scene.addText(f"{hour:02d}:00", hour_font)
-                text.setPos(5, y + 2)
-                text.setDefaultTextColor(dim_fg)
-                text.setZValue(1)
-
-                # Half-hour dashed line
-                y_half = self._y_for_hour(hour + 0.5, grid_h)
-                dash_pen = QtGui.QPen(half_color, 1)
-                dash_pen.setStyle(Qt.PenStyle.DashLine)
-                self._scene.addLine(self.TIME_COL_W, y_half, self.TIME_COL_W + grid_w, y_half, dash_pen)
-
-    def _add_column_separators(self, fg: QColor, ndays: int, col_w: float, grid_h: int) -> None:
-        sep_color = QColor(fg)
-        sep_color.setAlpha(14)
-        for i in range(ndays + 1):
-            x = self.TIME_COL_W + i * col_w
-            pen = QtGui.QPen(sep_color, 1)
-            self._scene.addLine(x, 0, x, grid_h, pen)
-
-    def _add_session_cards(self, fg: QColor, accent: QColor, days: list[date], day_index: dict[date, int], col_w: float, grid_h: int) -> None:
-        for s in self._sessions:
-            if s.session_type.lower() != "work":
-                continue
-            d = s.timestamp.date()
-            if d not in day_index:
-                continue
-
-            session_end_dt = s.timestamp
-            session_start_dt = session_end_dt - timedelta(seconds=s.duration_sec)
-
-            if session_start_dt.date() != d:
-                session_start_dt = session_start_dt.replace(
-                    year=d.year, month=d.month, day=d.day,
-                    hour=self._t_start.hour, minute=self._t_start.minute, second=0,
+            if is_today:
+                circle_r = max(day_br.width(), day_br.height()) / 2 + 4
+                painter.setPen(QtCore.Qt.PenStyle.NoPen)
+                painter.setBrush(palette.color(QtGui.QPalette.ColorRole.Highlight))
+                painter.drawEllipse(QtCore.QPointF(cx, cy), circle_r, circle_r)
+                painter.setPen(QtGui.QColor("white"))
+                painter.drawText(
+                    int(cx - day_br.width() / 2),
+                    int(cy + day_br.height() / 2 - fm.descent()),
+                    day_str,
+                )
+            else:
+                is_other_month = d.month != today.month
+                c = QtGui.QColor(text_color)
+                if is_other_month:
+                    c.setAlphaF(0.4)
+                painter.setPen(c)
+                painter.drawText(
+                    int(cx - day_br.width() / 2),
+                    int(cy + day_br.height() / 2 - fm.descent()),
+                    day_str,
                 )
 
-            t_start = session_start_dt.time()
-            t_end = session_end_dt.time()
-            vis_start = max(t_start, self._t_start)
-            vis_end = min(t_end, self._t_end)
-            if vis_start >= vis_end:
-                continue
-
-            y1 = self._y_for_time(vis_start, grid_h)
-            y2 = self._y_for_time(vis_end, grid_h)
-            if y2 - y1 < 4:
-                y2 = y1 + 4
-
-            col_i = day_index[d]
-            x = self.TIME_COL_W + col_i * col_w + 3
-            bw = col_w - 6
-
-            card_color = QColor(accent)
-            card_color.setAlpha(210)
-
-            path = QPainterPath()
-            path.addRoundedRect(QRectF(x, y1, bw, y2 - y1), 6, 6)
-
-            card = SessionCard(path, s.duration_sec // 60, vis_start, vis_end)
-            card.setBrush(QtGui.QBrush(card_color))
-            card.setPen(QtGui.QPen(Qt.PenStyle.NoPen))
-            card.setZValue(2)
-            self._scene.addItem(card)
-
-            # Add text to the card
-            card_h = y2 - y1
-            if card_h > 10:
-                text_color = QColor("white")
-                if card_h > 28:
-                    label = "Work"
-                    mins = s.duration_sec // 60
-
-                    label_item = self._scene.addText(label)
-                    label_font = QtGui.QFont(self.font())
-                    label_font.setWeight(QtGui.QFont.Weight.Bold)
-                    label_item.setFont(label_font)
-                    label_item.setDefaultTextColor(text_color)
-                    label_item.setPos(x + 5, y1 + 3)
-                    label_item.setZValue(3)
-
-                    dur_item = self._scene.addText(f"{mins}m")
-                    dur_font = QtGui.QFont(self.font())
-                    dur_font.setPointSize(max(6, self.font().pointSize() - 2))
-                    dur_item.setFont(dur_font)
-                    dim_text = QColor(text_color)
-                    dim_text.setAlpha(180)
-                    dur_item.setDefaultTextColor(dim_text)
-                    dur_item.setPos(x + 5, y1 + 18)
-                    dur_item.setZValue(3)
-                else:
-                    mins = s.duration_sec // 60
-                    dur_font = QtGui.QFont(self.font())
-                    dur_font.setPointSize(max(6, self.font().pointSize() - 2))
-
-                    text_item = self._scene.addText(f"Work {mins}m")
-                    text_item.setFont(dur_font)
-                    text_item.setDefaultTextColor(text_color)
-                    text_item.setPos(x + 4, y1 + 1)
-                    text_item.setZValue(3)
-
-    def _add_check_in_dots(self, accent: QColor, day_index: dict[date, int], col_w: float, grid_h: int) -> None:
-        for c in self._check_ins:
-            d = c.timestamp.date()
-            if d not in day_index:
-                continue
-            t = c.timestamp.time()
-            if not (self._t_start <= t < self._t_end):
-                continue
-            y = self._y_for_time(t, grid_h)
-            col_i = day_index[d]
-            dot_x = self.TIME_COL_W + (col_i + 1) * col_w - 10
-
-            dot_color = QColor(accent)
-            dot_color.setAlpha(230)
-
-            dot = CheckInDot(t)
-            dot.setRect(dot_x - 4, y - 4, 8, 8)
-            dot.setBrush(QtGui.QBrush(dot_color))
-            dot.setPen(QtGui.QPen(Qt.PenStyle.NoPen))
-            dot.setZValue(2)
-            self._scene.addItem(dot)
-
-    def _add_current_time_line(self, accent: QColor, day_index: dict[date, int], col_w: float, grid_h: int) -> None:
-        now = datetime.now()
-        if now.date() not in day_index:
-            return
-        t = now.time()
-        if not (self._t_start <= t < self._t_end):
-            return
-
-        y = self._y_for_time(t, grid_h)
-        col_i = day_index[now.date()]
-        x0 = self.TIME_COL_W + col_i * col_w
-        x1 = self.TIME_COL_W + (col_i + 1) * col_w
-
-        now_color = QColor("#eb4034")
-        pen = QtGui.QPen(now_color, 2)
-        self._current_time_line = self._scene.addLine(x0 + 10, y, x1, y, pen)
-        self._current_time_line.setZValue(4)
-
-        self._current_time_dot = self._scene.addEllipse(x0 + 1, y - 5, 10, 10, QtGui.QPen(Qt.PenStyle.NoPen), QtGui.QBrush(now_color))
-        self._current_time_dot.setZValue(4)
-
-    def _update_current_time_line_position(self) -> None:
-        """Update only the current-time line position, not the entire scene."""
-        if self._current_time_line is None or not self._day_index:
-            return
-
-        grid_h = self._grid_height_for_range()
-
-        now = datetime.now()
-        if now.date() not in self._day_index:
-            return
-        t = now.time()
-        if not (self._t_start <= t < self._t_end):
-            return
-
-        y = self._y_for_time(t, grid_h)
-        col_i = self._day_index[now.date()]
-        x0 = self.TIME_COL_W + col_i * self._col_w
-        x1 = self.TIME_COL_W + (col_i + 1) * self._col_w
-
-        self._current_time_line.setLine(x0 + 10, y, x1, y)
-        if self._current_time_dot is not None:
-            self._current_time_dot.setRect(x0 + 1, y - 5, 10, 10)
-
-    def _add_empty_state(self, fg: QColor, grid_w: float, grid_h: int) -> None:
-        has_data = any(
-            self._range_start <= s.timestamp.date() <= self._range_end
-            and s.session_type.lower() == "work"
-            for s in self._sessions
-        ) or any(
-            self._range_start <= c.timestamp.date() <= self._range_end
-            for c in self._check_ins
-        )
-        if has_data:
-            return
-
-        dim = QColor(fg)
-        dim.setAlpha(90)
-        msg_font = QFont(self.font())
-        msg_font.setPointSize(self.font().pointSize() + 1)
-
-        text = self._scene.addText("No sessions recorded this week", msg_font)
-        text.setDefaultTextColor(dim)
-        text.setPos(self.TIME_COL_W + grid_w / 2 - 100, grid_h / 2 - 20)
-        text.setZValue(0)
-
-    def changeEvent(self, event: QtCore.QEvent) -> None:
-        if event.type() == QtCore.QEvent.Type.PaletteChange:
-            self._rebuild_scene()
-        super().changeEvent(event)
+        painter.end()
 
 
-# ─── CalendarPage ──────────────────────────────────────────────────────────────
+class CalendarGridView(QtWidgets.QWidget):
+    """Weekly calendar grid rendered via QGraphicsScene/QGraphicsView."""
 
-class CalendarPage(QtWidgets.QWidget):
-    def __init__(self, settings: AppSettings, parent=None) -> None:
+    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
-        self._reader = MetricsReader(settings.metrics_log_path)
-        self._monday = _week_monday(date.today())
+        self._blocks: list[SessionBlock] = []
+        self._range_start_min: float = _time_to_minutes(CC["DEFAULT_RANGE_START"])
+        self._range_end_min: float = _time_to_minutes(CC["DEFAULT_RANGE_STOP"])
+        self._week_start: date = date.today()
+        self._day_count = 7
+        self._active_tooltip: _SessionTooltip | None = None
 
-        # ── Header bar ────────────────────────────────────────────────────────
-        self._btn_prev = QtWidgets.QToolButton()
-        self._btn_prev.setText("‹")
-        self._btn_prev.setFixedSize(32, 32)
-
-        self._btn_next = QtWidgets.QToolButton()
-        self._btn_next.setText("›")
-        self._btn_next.setFixedSize(32, 32)
-
-        self._btn_today = QtWidgets.QPushButton("Today")
-        self._btn_today.setFixedHeight(32)
-
-        self._range_label = QtWidgets.QLabel()
-        self._range_label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
-
-        self._week_badge = QtWidgets.QLabel()
-        self._week_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._week_badge.setFixedHeight(22)
-        self._week_badge.setStyleSheet("""
-            QLabel {
-                background-color: palette(midlight);
-                border-radius: 10px;
-                padding: 0px 10px;
-                font-size: 11px;
-                color: palette(windowtext);
-            }
-        """)
-
-        header = QtWidgets.QHBoxLayout()
-        header.setContentsMargins(12, 8, 12, 8)
-        header.setSpacing(6)
-        header.addWidget(self._btn_prev)
-        header.addWidget(self._btn_next)
-        header.addWidget(self._btn_today)
-        header.addSpacing(8)
-        header.addWidget(self._range_label)
-        header.addWidget(self._week_badge)
-        header.addStretch()
-
-        # Wrap header in a fixed-height widget
-        header_widget = QtWidgets.QWidget()
-        header_widget.setLayout(header)
-        header_widget.setFixedHeight(48)
-
-        # ── Week grid and header ───────────────────────────────────────────────
-        self._grid = CalWeekGrid()
-        self._week_header = CalWeekHeader()
+        self._header = _DayHeaderWidget(self)
+        self._scene = QtWidgets.QGraphicsScene(self)
+        self._view = QtWidgets.QGraphicsView(self._scene, self)
+        self._view.setAlignment(
+            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignTop
+        )
+        self._view.setHorizontalScrollBarPolicy(
+            QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self._view.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+        self._view.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+        self._view.setStyleSheet("background: transparent;")
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        layout.addWidget(header_widget)
-        layout.addWidget(self._week_header)
-        layout.addWidget(self._grid, 1)
+        layout.addWidget(self._header)
+        layout.addWidget(self._view)
 
-        self._btn_prev.clicked.connect(self._go_prev)
-        self._btn_next.clicked.connect(self._go_next)
-        self._btn_today.clicked.connect(self._go_today)
+        # Current-time timer
+        self._time_indicator: CurrentTimeIndicator | None = None
+        self._timer = QtCore.QTimer(self)
+        self._timer.timeout.connect(self._update_time_indicator)
+        self._timer.start(60_000)
 
-        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+    # ---- Public API -------------------------------------------------------
 
-        # Schedule updates after layout is computed
-        QtCore.QTimer.singleShot(0, self._update_view)
+    def set_data(self, blocks: list[SessionBlock], week_start: date) -> None:
+        self._blocks = blocks
+        self._week_start = week_start
+        self._header.set_week(week_start)
+        self._compute_visible_range()
+        self._rebuild_scene()
 
-    def refresh(self) -> None:
-        self._update_view()
+    # ---- Visible range auto-fit (§3.5) ------------------------------------
 
-    def _sync_header_after_layout(self) -> None:
-        """Sync header with grid after layout is complete."""
-        days, col_w = self._grid.get_header_info()
-        self._week_header.set_days(days, col_w)
+    def _compute_visible_range(self) -> None:
+        if not self._blocks:
+            self._range_start_min = _time_to_minutes(CC["DEFAULT_RANGE_START"])
+            self._range_end_min = _time_to_minutes(CC["DEFAULT_RANGE_STOP"])
+            return
+
+        earliest = min(_dt_to_minutes(b.start) for b in self._blocks)
+        latest = max(_dt_to_minutes(b.end) for b in self._blocks)
+        pad = CC["AUTOFIT_PADDING_MINUTES"]
+
+        start = math.floor(earliest / 60) * 60 - pad  # floor to hour then pad
+        end = math.ceil(latest / 60) * 60 + pad  # ceil to hour then pad
+
+        min_start = _time_to_minutes(CC["MIN_RANGE_START"])
+        min_stop = _time_to_minutes(CC["MIN_RANGE_STOP"])
+        start = min(start, min_start)
+        end = max(end, min_stop)
+
+        start = max(start, 0)
+        end = min(end, 1440)
+
+        self._range_start_min = start
+        self._range_end_min = end
+
+    # ---- Scene construction -----------------------------------------------
+
+    def _rebuild_scene(self) -> None:
+        self._dismiss_tooltip()
+        self._scene.clear()
+        self._time_indicator = None
+
+        view_w = self._view.viewport().width()
+        if view_w < 100:
+            view_w = 800
+        col_w = (view_w - LEFT_MARGIN) / self._day_count
+        range_hours = (self._range_end_min - self._range_start_min) / 60
+        grid_h = range_hours * HOUR_HEIGHT
+
+        self._scene.setSceneRect(0, 0, view_w, grid_h)
+        self._col_w = col_w
+        self._grid_h = grid_h
+
+        palette = QtWidgets.QApplication.palette()
+        text_color = palette.color(QtGui.QPalette.ColorRole.WindowText)
+        line_color = palette.color(QtGui.QPalette.ColorRole.Mid)
+        today = date.today()
+
+        # --- Grid area ---
+
+        # Today column tint
+        for i in range(self._day_count):
+            d = self._week_start + timedelta(days=i)
+            if d == today:
+                x = LEFT_MARGIN + i * col_w
+                tint = QtGui.QColor(palette.color(QtGui.QPalette.ColorRole.Highlight))
+                tint.setAlphaF(0.06)
+                self._scene.addRect(
+                    x,
+                    0,
+                    col_w,
+                    grid_h,
+                    QtGui.QPen(QtCore.Qt.PenStyle.NoPen),
+                    tint,
+                )
+                break
+
+        # Hour lines and labels
+        start_hour = int(self._range_start_min // 60)
+        end_hour = int(math.ceil(self._range_end_min / 60))
+        for h in range(start_hour, end_hour + 1):
+            y = (h * 60 - self._range_start_min) / 60 * HOUR_HEIGHT
+            # Hour line
+            pen = QtGui.QPen(line_color, 1)
+            self._scene.addLine(LEFT_MARGIN, y, view_w, y, pen)
+            # Hour label
+            label = self._scene.addText(f"{h:02d}:00")
+            label_font = label.font()
+            label_font.setPixelSize(10)
+            label.setFont(label_font)
+            label.setDefaultTextColor(text_color)
+            label.setPos(4, y - 7)
+
+            # Half-hour dashed line
+            if h < end_hour:
+                half_y = y + HOUR_HEIGHT / 2
+                dash_pen = QtGui.QPen(line_color, 1, QtCore.Qt.PenStyle.DashLine)
+                self._scene.addLine(LEFT_MARGIN, half_y, view_w, half_y, dash_pen)
+
+        # Column separators
+        for i in range(self._day_count + 1):
+            x = LEFT_MARGIN + i * col_w
+            sep_pen = QtGui.QPen(line_color, 1)
+            sep_pen.setColor(
+                QtGui.QColor(
+                    line_color.red(), line_color.green(), line_color.blue(), 60
+                )
+            )
+            self._scene.addLine(x, 0, x, grid_h, sep_pen)
+
+        # --- Session cards ---
+        if not self._blocks:
+            empty_text = self._scene.addText("No sessions recorded this week")
+            ef = empty_text.font()
+            ef.setPixelSize(14)
+            empty_text.setFont(ef)
+            empty_text.setDefaultTextColor(text_color)
+            tw = empty_text.boundingRect().width()
+            empty_text.setPos(
+                (view_w - tw) / 2,
+                grid_h / 2 - 10,
+            )
+        else:
+            for block in self._blocks:
+                day_index = (block.start.date() - self._week_start).days
+                if day_index < 0 or day_index >= self._day_count:
+                    continue
+                x = LEFT_MARGIN + day_index * col_w + 2
+                w = col_w - 4
+
+                block_start_min = _dt_to_minutes(block.start)
+                block_end_min = _dt_to_minutes(block.end)
+
+                # Clip to visible range
+                block_start_min = max(block_start_min, self._range_start_min)
+                block_end_min = min(block_end_min, self._range_end_min)
+
+                y = (block_start_min - self._range_start_min) / 60 * HOUR_HEIGHT
+                h = max(
+                    CC["CARD_MIN_HEIGHT_PX"],
+                    (block_end_min - block_start_min) / 60 * HOUR_HEIGHT,
+                )
+
+                card = SessionCardItem(block, x, y, w, h)
+                card.setZValue(10)
+                self._scene.addItem(card)
+
+        # --- Current time indicator ---
+        self._add_time_indicator()
+
+    def _add_time_indicator(self) -> None:
+        today = date.today()
+        day_index = (today - self._week_start).days
+        if day_index < 0 or day_index >= self._day_count:
+            return
+        now_min = _dt_to_minutes(datetime.now())
+        if now_min < self._range_start_min or now_min > self._range_end_min:
+            return
+
+        x = LEFT_MARGIN + day_index * self._col_w
+        y = (now_min - self._range_start_min) / 60 * HOUR_HEIGHT
+
+        indicator = CurrentTimeIndicator()
+        indicator.setLine(x, y, x + self._col_w, y)
+        indicator.setZValue(20)
+        self._scene.addItem(indicator)
+        self._time_indicator = indicator
+
+    def _update_time_indicator(self) -> None:
+        today = date.today()
+        day_index = (today - self._week_start).days
+        if day_index < 0 or day_index >= self._day_count:
+            if self._time_indicator:
+                self._scene.removeItem(self._time_indicator)
+                self._time_indicator = None
+            return
+
+        now_min = _dt_to_minutes(datetime.now())
+        if now_min < self._range_start_min or now_min > self._range_end_min:
+            if self._time_indicator:
+                self._scene.removeItem(self._time_indicator)
+                self._time_indicator = None
+            return
+
+        if self._time_indicator is None:
+            self._add_time_indicator()
+        else:
+            x = LEFT_MARGIN + day_index * self._col_w
+            y = (now_min - self._range_start_min) / 60 * HOUR_HEIGHT
+            self._time_indicator.setLine(x, y, x + self._col_w, y)
+
+    # ---- Tooltip ----------------------------------------------------------
+
+    def _dismiss_tooltip(self) -> None:
+        if self._active_tooltip:
+            self._active_tooltip.close()
+            self._active_tooltip.deleteLater()
+            self._active_tooltip = None
+
+    def _show_tooltip_for(self, block: SessionBlock, global_pos: QtCore.QPoint) -> None:
+        self._dismiss_tooltip()
+        self._active_tooltip = _SessionTooltip(block, self)
+        self._active_tooltip.show_at(global_pos)
+
+    # ---- Events -----------------------------------------------------------
 
     def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
-        """Update header layout when window is resized."""
         super().resizeEvent(event)
-        # Sync header with grid's computed layout after resize
-        days, col_w = self._grid.get_header_info()
-        self._week_header.set_days(days, col_w)
+        if self._blocks or self._scene.items():
+            self._rebuild_scene()
 
-    def _update_view(self) -> None:
-        check_ins, sessions = self._reader.read_all()
-        sunday = self._monday + timedelta(days=6)
-
-        self._grid.set_data(self._monday, sunday, check_ins, sessions)
-
-        # Sync header with grid's actual layout
-        # Use the column width computed by the grid after it rebuilds
-        days, col_w = self._grid.get_header_info()
-        self._week_header.set_days(days, col_w)
-
-        if self._monday.month == sunday.month:
-            label = f"{self._monday.day} – {sunday.day} {sunday.strftime('%b %Y')}"
+    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
+        scene_pos = self._view.mapToScene(
+            self._view.mapFromGlobal(event.globalPosition().toPoint())
+        )
+        items = self._scene.items(scene_pos)
+        card = next((i for i in items if isinstance(i, SessionCardItem)), None)
+        if card:
+            self._show_tooltip_for(card.block, event.globalPosition().toPoint())
         else:
-            label = f"{self._monday.strftime('%-d %b')} – {sunday.strftime('%-d %b %Y')}"
-        self._range_label.setText(label)
+            self._dismiss_tooltip()
+        super().mousePressEvent(event)
 
-        iso_week = self._monday.isocalendar()[1]
-        self._week_badge.setText(f"Week {iso_week}")
 
-    def _go_prev(self) -> None:
-        self._monday -= timedelta(weeks=1)
-        self._update_view()
+# ---------------------------------------------------------------------------
+# Session tooltip popup
+# ---------------------------------------------------------------------------
 
-    def _go_next(self) -> None:
-        self._monday += timedelta(weeks=1)
-        self._update_view()
+
+class _SessionTooltip(QtWidgets.QFrame):
+    def __init__(self, block: SessionBlock, parent: QtWidgets.QWidget) -> None:
+        super().__init__(parent, QtCore.Qt.WindowType.ToolTip)
+        self.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
+        self.setStyleSheet(
+            "QFrame { background: palette(window); border: 1px solid palette(mid); "
+            "border-radius: 6px; padding: 8px; }"
+            "QLabel { border: none; padding: 0; }"
+        )
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setSpacing(4)
+
+        duration_min = int((block.end - block.start).total_seconds()) // 60
+        start_str = block.start.strftime("%H:%M")
+        end_str = block.end.strftime("%H:%M")
+
+        header = QtWidgets.QLabel(f"<b>Work</b> — {duration_min} min")
+        header.setStyleSheet("font-size: 13px;")
+        layout.addWidget(header)
+
+        time_label = QtWidgets.QLabel(f"{start_str} – {end_str}")
+        time_label.setStyleSheet("font-size: 12px; color: palette(mid);")
+        layout.addWidget(time_label)
+
+        if block.check_ins:
+            for ci in block.check_ins:
+                layout.addWidget(self._make_separator())
+                prompt_lbl = QtWidgets.QLabel(f"<i>{ci.prompt}</i>")
+                prompt_lbl.setWordWrap(True)
+                prompt_lbl.setStyleSheet("font-size: 11px;")
+                layout.addWidget(prompt_lbl)
+                answer_lbl = QtWidgets.QLabel(ci.answer)
+                answer_lbl.setWordWrap(True)
+                answer_lbl.setStyleSheet("font-size: 11px;")
+                layout.addWidget(answer_lbl)
+                extras: list[str] = []
+                if ci.focus_rating is not None:
+                    extras.append(f"Focus: {ci.focus_rating}/5")
+                if ci.exercise_name:
+                    ex = ci.exercise_name
+                    if ci.exercise_rep_count is not None:
+                        ex += f" ×{ci.exercise_rep_count}"
+                    extras.append(ex)
+                if extras:
+                    extra_lbl = QtWidgets.QLabel(" · ".join(extras))
+                    extra_lbl.setStyleSheet("font-size: 10px; color: palette(mid);")
+                    layout.addWidget(extra_lbl)
+        else:
+            layout.addWidget(self._make_separator())
+            no_ci = QtWidgets.QLabel("No check-in recorded.")
+            no_ci.setStyleSheet("font-size: 11px; color: palette(mid);")
+            layout.addWidget(no_ci)
+
+        self.adjustSize()
+
+    def _make_separator(self) -> QtWidgets.QFrame:
+        sep = QtWidgets.QFrame()
+        sep.setFrameShape(QtWidgets.QFrame.Shape.HLine)
+        sep.setStyleSheet(
+            "color: palette(mid); border: none; max-height: 1px; background: palette(mid);"
+        )
+        return sep
+
+    def show_at(self, global_pos: QtCore.QPoint) -> None:
+        screen = QtWidgets.QApplication.screenAt(global_pos)
+        if screen:
+            geo = screen.availableGeometry()
+            x = min(global_pos.x() + 8, geo.right() - self.width())
+            y = min(global_pos.y() + 8, geo.bottom() - self.height())
+            self.move(max(x, geo.left()), max(y, geo.top()))
+        else:
+            self.move(global_pos)
+        self.show()
+
+
+# ---------------------------------------------------------------------------
+# Navigation bar
+# ---------------------------------------------------------------------------
+
+
+class _NavBar(QtWidgets.QWidget):
+    weekChanged = QtCore.Signal(date)  # emits the new week_start
+
+    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._week_start: date = _week_start_for_date(date.today())
+
+        self._prev_btn = QtWidgets.QPushButton("◀")
+        self._next_btn = QtWidgets.QPushButton("▶")
+        self._today_btn = QtWidgets.QPushButton("Today")
+        self._range_label = QtWidgets.QLabel()
+        self._week_label = QtWidgets.QLabel()
+
+        for btn in (self._prev_btn, self._next_btn, self._today_btn):
+            btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+            btn.setFlat(True)
+
+        self._range_label.setStyleSheet("font-size: 14px; font-weight: bold;")
+        self._week_label.setStyleSheet(
+            "font-size: 14px; background-color: palette(mid);"
+            "border-radius: 6px; padding: 4px 6px;"
+        )
+
+        layout = QtWidgets.QHBoxLayout(self)
+        layout.setContentsMargins(8, 4, 8, 4)
+        layout.addWidget(self._prev_btn)
+        layout.addWidget(self._range_label)
+        layout.addWidget(self._next_btn)
+        layout.addWidget(self._week_label)
+        layout.addStretch()
+        layout.addWidget(self._today_btn)
+
+        self._prev_btn.clicked.connect(lambda: self._navigate(-1))
+        self._next_btn.clicked.connect(lambda: self._navigate(1))
+        self._today_btn.clicked.connect(self._go_today)
+
+        self._update_labels()
+
+    @property
+    def week_start(self) -> date:
+        return self._week_start
+
+    def _navigate(self, direction: int) -> None:
+        self._week_start += timedelta(weeks=direction)
+        self._update_labels()
+        self.weekChanged.emit(self._week_start)
 
     def _go_today(self) -> None:
-        self._monday = _week_monday(date.today())
-        self._update_view()
+        self._week_start = _week_start_for_date(date.today())
+        self._update_labels()
+        self.weekChanged.emit(self._week_start)
 
-    def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
-        key = event.key()
-        if key == Qt.Key.Key_Left:
-            self._go_prev()
-        elif key == Qt.Key.Key_Right:
-            self._go_next()
-        elif key == Qt.Key.Key_T:
-            self._go_today()
+    def _update_labels(self) -> None:
+        end = self._week_start + timedelta(days=6)
+        if self._week_start.month == end.month:
+            range_str = f"{self._week_start.day} – {end.day} {end.strftime('%b %Y')}"
         else:
-            super().keyPressEvent(event)
+            range_str = (
+                f"{self._week_start.day} {self._week_start.strftime('%b')} – "
+                f"{end.day} {end.strftime('%b %Y')}"
+            )
+        self._range_label.setText(range_str)
+        iso_week = self._week_start.isocalendar()[1]
+        self._week_label.setText(f"Week {iso_week}")
 
 
-def _week_monday(d: date) -> date:
-    return d - timedelta(days=d.weekday())
+# ---------------------------------------------------------------------------
+# CalendarPage — top-level page widget
+# ---------------------------------------------------------------------------
+
+
+class CalendarPage(QtWidgets.QWidget):
+    def __init__(
+        self,
+        settings: AppSettings,
+        parent: QtWidgets.QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._settings = settings
+        self._provider: CalendarDataProvider | None = None
+
+        self._nav = _NavBar(self)
+        self._grid = CalendarGridView(self)
+
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(16, 8, 16, 8)
+        layout.addWidget(self._nav)
+        layout.addWidget(self._grid, 1)
+
+        self._nav.weekChanged.connect(self._on_week_changed)
+
+    def showEvent(self, event: QtGui.QShowEvent) -> None:
+        super().showEvent(event)
+        self._load_data()
+        self._refresh_grid()
+
+    def _load_data(self) -> None:
+        records = read_records(self._settings.metrics_log_path)
+        blocks = build_session_blocks(records)
+        self._provider = CalendarDataProvider(blocks)
+
+    def _refresh_grid(self) -> None:
+        if self._provider is None:
+            return
+        week_start = self._nav.week_start
+        blocks = self._provider.get_week(week_start)
+        self._grid.set_data(blocks, week_start)
+
+    def _on_week_changed(self, week_start: date) -> None:
+        self._refresh_grid()

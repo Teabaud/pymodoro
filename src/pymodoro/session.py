@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 
 from loguru import logger
@@ -103,6 +104,11 @@ class SleepRecoveryTimer(QtCore.QObject):
         remaining_ms = self._phase_timer.remainingTime()
         return round(remaining_ms / 1000) if remaining_ms >= 0 else -1
 
+    def started_at(self) -> datetime | None:
+        if self._started_at is None:
+            return None
+        return self._started_at.toPython().astimezone(timezone.utc)
+
     def ends_at(self) -> QtCore.QDateTime | None:
         return self._ends_at
 
@@ -157,7 +163,7 @@ class SleepRecoveryTimer(QtCore.QObject):
 
 
 class SessionPhaseManager(QtCore.QObject):
-    phaseChanged = QtCore.Signal(SessionPhase, SessionPhase, int)
+    phaseChanged = QtCore.Signal(SessionPhase, SessionPhase, int, object)
     phaseEndingSoon = QtCore.Signal(SessionPhase)
     workEnded = QtCore.Signal()
     breakEnded = QtCore.Signal()
@@ -220,8 +226,16 @@ class SessionPhaseManager(QtCore.QObject):
     def _start_phase(self, phase: SessionPhase, seconds: int) -> None:
         previous_phase = self._phase
         previous_phase_duration = self._timer.elapsed_seconds()
+        started_at = self._timer.started_at()
+        end_timestamp = (
+            started_at + timedelta(seconds=previous_phase_duration)
+            if started_at is not None
+            else datetime.now(timezone.utc)
+        )
         self._phase = phase
-        self.phaseChanged.emit(previous_phase, phase, previous_phase_duration)
+        self.phaseChanged.emit(
+            previous_phase, phase, previous_phase_duration, end_timestamp
+        )
         self._timer.start(seconds)
         logger.info(str(self))
 

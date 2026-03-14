@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import json
 import random
+from datetime import datetime, timezone
 from typing import Any, Callable, cast
 
 import pytest
 
 import pymodoro.app as app_module
 from pymodoro.app_ui_widgets.pages import Page
-from pymodoro.metrics_logger import CheckInSubmission, MetricsLogger
+from pymodoro.metrics_io import CheckInSubmission, MetricsLogger
 from pymodoro.session import SessionPhase
 from pymodoro.settings import AppSettings, CheckInSettings, TimersSettings
 
@@ -212,7 +213,9 @@ class DummyMetricsLogger:
             }
         )
 
-    def log_phase_duration(self, session_type: str, duration_sec: int) -> None:
+    def log_phase_duration(
+        self, session_type: str, duration_sec: int, timestamp: Any = None
+    ) -> None:
         self.session_duration_events.append(
             {
                 "session_type": session_type,
@@ -419,7 +422,9 @@ def test_phase_change_hides_warning_toast(
     app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
     tray_controller = cast(DummyTrayController, app._tray_controller)
 
-    app._sp_manager.phaseChanged.emit(SessionPhase.WORK, SessionPhase.BREAK, 120)
+    app._sp_manager.phaseChanged.emit(
+        SessionPhase.WORK, SessionPhase.BREAK, 120, datetime.now(timezone.utc)
+    )
 
     assert tray_controller.hide_phase_end_toast_called == 1
     assert sound_player.play_calls == 0
@@ -440,7 +445,9 @@ def test_pause_to_work_phase_change_plays_sound(
 
     app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
 
-    app._sp_manager.phaseChanged.emit(SessionPhase.BREAK, SessionPhase.WORK, 120)
+    app._sp_manager.phaseChanged.emit(
+        SessionPhase.BREAK, SessionPhase.WORK, 120, datetime.now(timezone.utc)
+    )
 
     assert sound_player.play_calls == 1
 
@@ -496,12 +503,10 @@ def test_check_in_submit_creates_jsonl_log_record(
     assert record["record_type"] == "check_in"
     assert record["prompt"] == "Break time?"
     assert record["answer"] == "done"
-    assert record["focus_rating"] is None
-    assert record["exercise_name"] is None
-    assert record["exercise_rep_count"] is None
-    assert record["session_type"] is None
-    assert record["duration_sec"] is None
-    assert record["timestamp_iso"].endswith("Z")
+    assert "focus_rating" not in record
+    assert "exercise_name" not in record
+    assert "exercise_rep_count" not in record
+    assert record["timestamp"].endswith("Z") or record["timestamp"].endswith("+00:00")
 
 
 def test_check_in_submit_appends_multiple_jsonl_records(
@@ -544,9 +549,9 @@ def test_check_in_submit_appends_multiple_jsonl_records(
     assert first_record["exercise_rep_count"] == 12
     assert second_record["record_type"] == "check_in"
     assert second_record["answer"] == "second"
-    assert second_record["focus_rating"] is None
-    assert second_record["exercise_name"] is None
-    assert second_record["exercise_rep_count"] is None
+    assert "focus_rating" not in second_record
+    assert "exercise_name" not in second_record
+    assert "exercise_rep_count" not in second_record
 
 
 def test_phase_change_logs_session_duration_row(
@@ -561,7 +566,9 @@ def test_phase_change_logs_session_duration_row(
 
     monkeypatch.setattr(app_module, "MetricsLogger", MetricsLogger)
     app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
-    app._on_phase_changed(SessionPhase.BREAK, SessionPhase.WORK, 42)
+    app._on_phase_changed(
+        SessionPhase.BREAK, SessionPhase.WORK, 42, datetime.now(timezone.utc)
+    )
 
     lines = settings.metrics_log_path.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 1
@@ -571,11 +578,11 @@ def test_phase_change_logs_session_duration_row(
     assert record["session_type"] == "Break"
     assert isinstance(record["duration_sec"], int) is True
     assert record["duration_sec"] == 42
-    assert record["prompt"] is None
-    assert record["answer"] is None
-    assert record["focus_rating"] is None
-    assert record["exercise_name"] is None
-    assert record["exercise_rep_count"] is None
+    assert "prompt" not in record
+    assert "answer" not in record
+    assert "focus_rating" not in record
+    assert "exercise_name" not in record
+    assert "exercise_rep_count" not in record
 
 
 def test_check_in_prompt_selection_not_constant(
@@ -646,8 +653,12 @@ def test_phase_change_updates_open_settings_paused_state(
     app_window = cast(DummyAppWindow, app._app_window)
     settings_panel = cast(DummySettingsPanel, app_window.get_settings_panel())
 
-    app._sp_manager.phaseChanged.emit(SessionPhase.WORK, SessionPhase.PAUSE, 300)
-    app._sp_manager.phaseChanged.emit(SessionPhase.PAUSE, SessionPhase.WORK, 60)
+    app._sp_manager.phaseChanged.emit(
+        SessionPhase.WORK, SessionPhase.PAUSE, 300, datetime.now(timezone.utc)
+    )
+    app._sp_manager.phaseChanged.emit(
+        SessionPhase.PAUSE, SessionPhase.WORK, 60, datetime.now(timezone.utc)
+    )
 
     assert settings_panel.paused_states == [False, True, False]
 

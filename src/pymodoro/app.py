@@ -1,6 +1,7 @@
 # import os
 # os.environ["QT_NO_GLIB"] = "1"
 import random
+from datetime import datetime
 
 from loguru import logger
 
@@ -8,7 +9,7 @@ from pymodoro.app_ui import AppWindow
 from pymodoro.app_ui_widgets.pages import Page
 from pymodoro.app_ui_widgets.settings_panel import SettingsPanel
 from pymodoro.check_in_screen import CheckInScreen
-from pymodoro.metrics_logger import CheckInSubmission, MetricsLogger
+from pymodoro.metrics_io import CheckInSubmission, MetricsLogger
 from pymodoro.notification_sound import NotificationSoundPlayer
 from pymodoro.session import (
     SessionPhase,
@@ -56,7 +57,9 @@ class PomodoroApp(QtCore.QObject):
         self._tray_controller.quitRequested.connect(self._app.quit)
         self._tray_controller.openAppRequested.connect(self._open_app_window)
         self._tray_controller.checkInRequested.connect(self._show_check_in_window)
-        self._tray_controller.startBreakRequested.connect(self._on_start_break_from_toast)
+        self._tray_controller.startBreakRequested.connect(
+            self._on_start_break_from_toast
+        )
         self._tray_controller.openSettingsRequested.connect(self._open_settings_panel)
 
         self._sp_manager.start()
@@ -96,6 +99,7 @@ class PomodoroApp(QtCore.QObject):
         previous_phase: SessionPhase,
         current_phase: SessionPhase,
         previous_phase_duration: int,
+        end_timestamp: datetime,
     ) -> None:
         self._tray_controller.refresh()
         self._tray_controller.hide_phase_end_toast()
@@ -104,7 +108,9 @@ class PomodoroApp(QtCore.QObject):
         if self._app_window:
             settings_panel = self._app_window.get_settings_panel()
             settings_panel.set_paused(current_phase == SessionPhase.PAUSE)
-        self._metrics_logger.log_phase_duration(previous_phase, previous_phase_duration)
+        self._metrics_logger.log_phase_duration(
+            previous_phase, previous_phase_duration, timestamp=end_timestamp
+        )
 
     def _on_start_break_from_toast(self) -> None:
         self._sp_manager.start_break_phase()
@@ -115,7 +121,9 @@ class PomodoroApp(QtCore.QObject):
             return
         check_in_prompt = self._select_check_in_prompt()
         if self._check_in_screen is None:
-            self._check_in_screen = CheckInScreen(check_in_prompt=check_in_prompt, settings=self._settings)
+            self._check_in_screen = CheckInScreen(
+                check_in_prompt=check_in_prompt, settings=self._settings
+            )
             self._check_in_screen.submitted.connect(self._on_check_in_screen_submit)
             self._check_in_screen.finished.connect(self._on_check_in_finished)
         else:

@@ -122,7 +122,9 @@ class TrayController(QtCore.QObject):
             self._phase_end_toast = PhaseEndToast(self)
             self._phase_end_toast.snoozeRequested.connect(self.snoozeRequested.emit)
             self._phase_end_toast.checkInRequested.connect(self.checkInRequested.emit)
-            self._phase_end_toast.startBreakRequested.connect(self.startBreakRequested.emit)
+            self._phase_end_toast.startBreakRequested.connect(
+                self.startBreakRequested.emit
+            )
         return self._phase_end_toast
 
 

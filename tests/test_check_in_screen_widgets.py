@@ -21,7 +21,9 @@ class _StubOverlay(QObject):
         self.current = current
 
 
-def _make_card_with_stub(prompts: list[str], current: str) -> tuple[PromptCard, list[_StubOverlay]]:
+def _make_card_with_stub(
+    prompts: list[str], current: str
+) -> tuple[PromptCard, list[_StubOverlay]]:
     card = PromptCard(current, prompts=prompts)
     created: list[_StubOverlay] = []
 

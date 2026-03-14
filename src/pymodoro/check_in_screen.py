@@ -7,7 +7,7 @@ from pymodoro.check_in_screen_widgets import (
     FocusRatingWidget,
     PromptCard,
 )
-from pymodoro.metrics_logger import CheckInSubmission
+from pymodoro.metrics_io import CheckInSubmission
 from pymodoro.settings import AppSettings
 from pymodoro.tray import get_app_icon
 

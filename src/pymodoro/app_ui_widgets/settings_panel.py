@@ -105,7 +105,7 @@ class SettingsPanel(QWidget):
         layout.addWidget(self._timers_group)
         layout.addWidget(self._notifications_group)
         layout.addWidget(self._prompts_group)
-        button_layout = QHBoxLayout(content)
+        button_layout = QHBoxLayout()
         button_layout.addWidget(self._reset_button)
         button_layout.addStretch()
         button_layout.addWidget(self._save_button)

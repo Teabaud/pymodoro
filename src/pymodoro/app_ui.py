@@ -3,9 +3,9 @@ from typing import cast
 from loguru import logger
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from pymodoro.app_ui_widgets.calendar_page import CalendarPage
 from pymodoro.app_ui_widgets.dashboard import Dashboard
 from pymodoro.app_ui_widgets.pages import Page
-from pymodoro.app_ui_widgets.calendar_page import CalendarPage
 from pymodoro.app_ui_widgets.settings_panel import SettingsPanel
 from pymodoro.app_ui_widgets.sidebar import Sidebar
 from pymodoro.settings import AppSettings

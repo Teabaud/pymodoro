@@ -70,7 +70,9 @@ class _PromptOverlay(QWidget):
             btn.setCheckable(True)
             btn.setAutoDefault(False)
             btn.setDefault(False)
-            btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+            btn.setSizePolicy(
+                QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
+            )
             btn.clicked.connect(self._make_click_handler(i))
             self._buttons.append(btn)
             outer.addWidget(btn)
@@ -82,6 +84,7 @@ class _PromptOverlay(QWidget):
         def handler() -> None:
             self.prompt_selected.emit(self._prompts[index])
             self.close()
+
         return handler
 
     def _update_highlight(self) -> None:
@@ -155,7 +158,9 @@ class PromptCard(QWidget):
     def _on_prompt_clicked(self) -> None:
         if not self._prompts:
             return
-        overlay = _PromptOverlay(self._prompts, self._check_in_prompt.text(), self.window())
+        overlay = _PromptOverlay(
+            self._prompts, self._check_in_prompt.text(), self.window()
+        )
         overlay.prompt_selected.connect(self._check_in_prompt.setText)
 
     def set_check_in_prompt(self, text: str) -> None:

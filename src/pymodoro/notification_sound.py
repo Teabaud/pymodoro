@@ -14,7 +14,6 @@ class NotificationSoundPlayer:
         self._data = data
         self._samplerate = samplerate
         self._volume = 0.8
-        
+
     def play(self) -> None:
         sd.play(self._data * self._volume, self._samplerate)
-        
