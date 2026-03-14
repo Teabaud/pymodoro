@@ -5,6 +5,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 from pymodoro.app_ui_widgets.dashboard import Dashboard
 from pymodoro.app_ui_widgets.pages import Page
+from pymodoro.app_ui_widgets.calendar_page import CalendarPage
 from pymodoro.app_ui_widgets.settings_panel import SettingsPanel
 from pymodoro.app_ui_widgets.sidebar import Sidebar
 from pymodoro.settings import AppSettings
@@ -17,7 +18,8 @@ class MainArea(QtWidgets.QFrame):
     ) -> None:
         super().__init__(parent)
         self._page_widgets: dict[Page, QtWidgets.QWidget] = {
-            Page.DASHBOARD: Dashboard(self),
+            Page.DASHBOARD: Dashboard(settings, self),
+            Page.CALENDAR: CalendarPage(settings, self),
             Page.SETTINGS: SettingsPanel(settings, self),
         }
 

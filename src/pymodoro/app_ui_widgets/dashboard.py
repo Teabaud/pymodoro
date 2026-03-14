@@ -1,4 +1,5 @@
 from PySide6 import QtCore, QtWidgets
+from pymodoro.settings import AppSettings
 
 
 class Content(QtWidgets.QFrame):
@@ -13,7 +14,7 @@ class Content(QtWidgets.QFrame):
 
 
 class Dashboard(QtWidgets.QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, settings: AppSettings, parent=None):
         super().__init__(parent)
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)

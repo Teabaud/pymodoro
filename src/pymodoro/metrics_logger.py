@@ -59,4 +59,4 @@ class MetricsLogger:
 
     @staticmethod
     def _timestamp_iso() -> str:
-        return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        return datetime.now(timezone.utc).isoformat()
