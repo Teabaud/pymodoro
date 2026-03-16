@@ -37,6 +37,7 @@ class CheckInPromptRowWidget(QFrame):
         self,
         check_in_prompt: str,
         can_delete: bool,
+        placeholder: str = "Enter check-in prompt...",
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -59,7 +60,7 @@ class CheckInPromptRowWidget(QFrame):
         layout.addWidget(drag_handle)
 
         self._line_edit = QLineEdit(check_in_prompt)
-        self._line_edit.setPlaceholderText("Enter check-in prompt...")
+        self._line_edit.setPlaceholderText(placeholder)
         self._line_edit.textChanged.connect(lambda _: self.textChanged.emit())
         self._line_edit.installEventFilter(self)
         self._line_edit.editingFinished.connect(lambda: self.blurRequested.emit(self))
@@ -92,8 +93,13 @@ class PromptsEditor(QWidget):
     changed = QtCore.Signal()
     canAddChanged = QtCore.Signal(bool)
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        placeholder: str = "Enter check-in prompt...",
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
+        self._placeholder = placeholder
         self._list = QListWidget()
         self._has_empty_prompt = False
         self._list.setAlternatingRowColors(False)
@@ -163,7 +169,9 @@ class PromptsEditor(QWidget):
     def _append_prompt_row(self, check_in_prompt: str) -> QListWidgetItem:
         item = QListWidgetItem()
         row = CheckInPromptRowWidget(
-            check_in_prompt=check_in_prompt, can_delete=self._list.count() > 0
+            check_in_prompt=check_in_prompt,
+            can_delete=self._list.count() > 0,
+            placeholder=self._placeholder,
         )
         row.deleteRequested.connect(self._remove_prompt_row)
         row.textChanged.connect(self._on_row_text_changed)
@@ -389,3 +397,49 @@ class NotificationsSectionWidget(QGroupBox):
 
     def set_sound_enabled(self, enabled: bool) -> None:
         self._sound_checkbox.setChecked(enabled)
+
+
+class ProjectsSectionWidget(QGroupBox):
+    changed = QtCore.Signal()
+
+    def __init__(self, projects: list[str], parent: QWidget | None = None) -> None:
+        super().__init__("Projects", parent)
+        layout = QVBoxLayout(self)
+
+        self.prompts_editor = PromptsEditor(placeholder="Enter project name...")
+        self.prompts_editor.set_prompts(projects if projects else [""])
+        self.prompts_editor.changed.connect(self.changed.emit)
+
+        self.add_button = QPushButton("Add")
+        self.add_button.clicked.connect(lambda: self.prompts_editor.add_prompt(""))
+        self.add_button.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        self.add_button.setEnabled(self.prompts_editor.can_add_prompt())
+        self.prompts_editor.canAddChanged.connect(self.add_button.setEnabled)
+
+        layout.addWidget(self.prompts_editor)
+        layout.addWidget(self.add_button)
+
+
+class ActivitiesSectionWidget(QGroupBox):
+    changed = QtCore.Signal()
+
+    def __init__(self, activities: list[str], parent: QWidget | None = None) -> None:
+        super().__init__("Activities", parent)
+        layout = QVBoxLayout(self)
+
+        self.prompts_editor = PromptsEditor(placeholder="Enter activity name...")
+        self.prompts_editor.set_prompts(activities if activities else [""])
+        self.prompts_editor.changed.connect(self.changed.emit)
+
+        self.add_button = QPushButton("Add")
+        self.add_button.clicked.connect(lambda: self.prompts_editor.add_prompt(""))
+        self.add_button.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        self.add_button.setEnabled(self.prompts_editor.can_add_prompt())
+        self.prompts_editor.canAddChanged.connect(self.add_button.setEnabled)
+
+        layout.addWidget(self.prompts_editor)
+        layout.addWidget(self.add_button)

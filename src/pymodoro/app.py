@@ -1,5 +1,3 @@
-# import os
-# os.environ["QT_NO_GLIB"] = "1"
 import random
 from datetime import datetime
 
@@ -9,7 +7,7 @@ from pymodoro.app_ui import AppWindow
 from pymodoro.app_ui_widgets.pages import Page
 from pymodoro.app_ui_widgets.settings_panel import SettingsPanel
 from pymodoro.check_in_screen import CheckInScreen
-from pymodoro.metrics_io import CheckInSubmission, MetricsLogger
+from pymodoro.metrics_io import CheckInRecord, MetricsLogger, SessionDurationRecord
 from pymodoro.notification_sound import NotificationSoundPlayer
 from pymodoro.session import (
     SessionPhase,
@@ -108,9 +106,13 @@ class PomodoroApp(QtCore.QObject):
         if self._app_window:
             settings_panel = self._app_window.get_settings_panel()
             settings_panel.set_paused(current_phase == SessionPhase.PAUSE)
-        self._metrics_logger.log_phase_duration(
-            previous_phase, previous_phase_duration, timestamp=end_timestamp
+
+        record = SessionDurationRecord(
+            timestamp=end_timestamp,
+            session_type=previous_phase,
+            duration_sec=max(0, previous_phase_duration),
         )
+        self._metrics_logger.log_record(record)
 
     def _on_start_break_from_toast(self) -> None:
         self._sp_manager.start_break_phase()
@@ -130,14 +132,14 @@ class PomodoroApp(QtCore.QObject):
             self._check_in_screen.set_check_in_prompt(check_in_prompt)
         self._check_in_screen.show()
 
-    def _on_check_in_screen_submit(self, submission: CheckInSubmission) -> None:
-        self._metrics_logger.log_check_in(submission)
+    def _on_check_in_screen_submit(self, record: CheckInRecord) -> None:
+        self._metrics_logger.log_record(record)
         logger.info(
             "Answer: {} | focus_rating: {} | exercise_result: ({}, {})",
-            submission.answer,
-            submission.focus_rating,
-            submission.exercise_name,
-            submission.exercise_rep_count,
+            record.answer,
+            record.focus_rating,
+            record.exercise_name,
+            record.exercise_rep_count,
         )
         if self._check_in_screen is not None:
             self._check_in_screen.accept()

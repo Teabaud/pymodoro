@@ -1,7 +1,9 @@
-from __future__ import annotations
+from typing import cast, get_args
 
 from PySide6 import QtCore, QtGui
 from PySide6.QtWidgets import (
+    QComboBox,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -12,6 +14,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from pymodoro.metrics_io import ExerciseResult, FocusRating, Leverage
 
 _OVERLAY_STYLESHEET = """
     #PromptOverlay QPushButton {
@@ -140,6 +144,7 @@ class PromptCard(QWidget):
         self._prompts = prompts or []
 
         self._check_in_prompt = _ClickableLabel(prompt, self)
+        self._check_in_prompt.setObjectName("PromptLabel")
         self._check_in_prompt.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self._check_in_prompt.setWordWrap(True)
         self._check_in_prompt.clicked.connect(self._on_prompt_clicked)
@@ -185,69 +190,127 @@ class PromptCard(QWidget):
         return self._input
 
 
-type FocusRating = int | None
-type ExerciseResult = tuple[str, int] | None
+class _ExclusiveToggleRow(QWidget):
+    """A row of exclusive toggle buttons. Click again to deselect."""
 
-
-class FocusRatingWidget(QWidget):
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        options: list[str],
+        tooltips: dict[str, str] | None = None,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
-        self._rating: FocusRating = None
-
-        label = QLabel("Focus (1–5)", self)
-
-        buttons_layout = QHBoxLayout()
-        buttons_layout.setSpacing(8)
-
+        self._selected: str | None = None
         self._buttons: list[QPushButton] = []
-        for value in range(1, 6):
-            button = QPushButton(str(value), self)
-            button.setCheckable(True)
-            button.setAutoDefault(False)
-            button.setDefault(False)
-            if value == 1:
-                button.setToolTip("Very distracted")
-            elif value == 5:
-                button.setToolTip("Deep focus")
-            button.clicked.connect(self._make_button_handler(value, button))
-            self._buttons.append(button)
-            buttons_layout.addWidget(button)
 
         layout = QHBoxLayout(self)
-        layout.addStretch(1)
-        layout.addWidget(label)
-        layout.addSpacing(12)
-        layout.addLayout(buttons_layout)
-        layout.addStretch(1)
-        self.setLayout(layout)
+        layout.setSpacing(8)
 
-    def _make_button_handler(self, value: int, button: QPushButton):
+        for option in options:
+            btn = QPushButton(option.capitalize(), self)
+            btn.setCheckable(True)
+            btn.setAutoDefault(False)
+            btn.setDefault(False)
+            if tooltips and option in tooltips:
+                btn.setToolTip(tooltips[option])
+            btn.clicked.connect(self._make_handler(option, btn))
+            btn.installEventFilter(self)
+            self._buttons.append(btn)
+            layout.addWidget(btn)
+
+        layout.addStretch(1)
+        self._update_tab_focus()
+
+    def _update_tab_focus(self) -> None:
+        """Make only the checked (or first) button tabbable."""
+        target = None
+        for btn in self._buttons:
+            if btn.isChecked():
+                target = btn
+                break
+        if target is None and self._buttons:
+            target = self._buttons[0]
+        for btn in self._buttons:
+            btn.setFocusPolicy(
+                QtCore.Qt.FocusPolicy.TabFocus
+                if btn is target
+                else QtCore.Qt.FocusPolicy.ClickFocus
+            )
+
+    def eventFilter(self, obj: QtCore.QObject, event: QtCore.QEvent) -> bool:
+        if event.type() == QtCore.QEvent.Type.KeyPress:
+            key = cast(QtGui.QKeyEvent, event).key()
+            buttons = self._buttons
+            tab_focus_reason = QtCore.Qt.FocusReason.TabFocusReason
+            # Left/Right arrows: move focus between buttons
+            if key in (QtCore.Qt.Key.Key_Left, QtCore.Qt.Key.Key_Right):
+                try:
+                    idx = buttons.index(cast(QPushButton, obj))
+                except ValueError:
+                    return False
+                delta = -1 if key == QtCore.Qt.Key.Key_Left else 1
+                buttons[(idx + delta) % len(buttons)].setFocus(tab_focus_reason)
+                return True
+            # Up/Down arrows: leave the row entirely
+            if key in (QtCore.Qt.Key.Key_Up, QtCore.Qt.Key.Key_Down):
+                for btn in buttons:
+                    btn.setFocusPolicy(QtCore.Qt.FocusPolicy.ClickFocus)
+                cast(QWidget, obj).focusNextPrevChild(key == QtCore.Qt.Key.Key_Down)
+                self._update_tab_focus()
+                return True
+            # Number keys: select Nth button
+            if QtCore.Qt.Key.Key_1 <= key <= QtCore.Qt.Key.Key_9:
+                n = key - QtCore.Qt.Key.Key_1
+                if n < len(buttons):
+                    buttons[n].click()
+                    buttons[n].setFocus(tab_focus_reason)
+                return True
+        return super().eventFilter(obj, event)
+
+    def _make_handler(self, value: str, button: QPushButton):
         def handler() -> None:
-            if self._rating == value:
-                # Clicking the same value again clears the rating (skip)
-                self._rating = None
+            if self._selected == value:
+                self._selected = None
                 button.setChecked(False)
             else:
-                self._rating = value
+                self._selected = value
                 for btn in self._buttons:
                     btn.setChecked(btn is button)
+            self._update_tab_focus()
 
         return handler
 
     @property
-    def rating(self) -> FocusRating:
-        return self._rating
+    def selected(self) -> str | None:
+        return self._selected
 
-    def set_rating(self, rating: FocusRating) -> None:
-        self._rating = rating
-        for index, button in enumerate[QPushButton](self._buttons, start=1):
-            button.setChecked(index == rating)
+    def clear(self) -> None:
+        self._selected = None
+        for btn in self._buttons:
+            btn.setChecked(False)
+        self._update_tab_focus()
+
+
+class FocusRatingWidget(_ExclusiveToggleRow):
+    """Focus rating selector with 1-5 buttons."""
+
+    _OPTIONS = [str(v) for v in range(1, 6)]
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(
+            self._OPTIONS,
+            tooltips={"1": "Very distracted", "5": "Deep focus"},
+            parent=parent,
+        )
+
+    @property
+    def rating(self) -> FocusRating:
+        return int(self.selected) if self.selected is not None else None
 
 
 class ExerciseWidget(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        label = QLabel("Exercise", self)
 
         self._rep_count_input = QSpinBox(self)
         self._rep_count_input.setRange(0, 999)
@@ -258,14 +321,10 @@ class ExerciseWidget(QWidget):
         self._exercise_name_input.setPlaceholderText("name of the exercise")
 
         layout = QHBoxLayout(self)
-        layout.addStretch(1)
-        layout.addWidget(label)
-        layout.addSpacing(12)
         layout.addWidget(self._rep_count_input, 1)
         layout.addSpacing(8)
         layout.addWidget(self._exercise_name_input, 3)
         layout.addStretch(1)
-        self.setLayout(layout)
 
     @property
     def rep_count(self) -> int:
@@ -283,3 +342,87 @@ class ExerciseWidget(QWidget):
     def clear(self) -> None:
         self._rep_count_input.setValue(0)
         self._exercise_name_input.clear()
+
+
+class ProjectWidget(QWidget):
+    """Project selector with an editable combo box."""
+
+    def __init__(
+        self,
+        projects: list[str],
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+
+        layout = QHBoxLayout(self)
+
+        self._combo = QComboBox(self)
+        self._combo.setEditable(True)
+        self._combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self._combo.addItems(projects)
+        self._combo.setCurrentIndex(-1)
+        self._combo.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
+        if (line_edit := self._combo.lineEdit()) is not None:
+            line_edit.setPlaceholderText("Select a project...")
+
+        layout.addWidget(self._combo)
+
+    @property
+    def project(self) -> str | None:
+        text = self._combo.currentText().strip()
+        return text or None
+
+    def clear(self) -> None:
+        self._combo.setCurrentIndex(-1)
+
+
+class ActivityWidget(_ExclusiveToggleRow):
+    """Activity selector as exclusive toggle buttons."""
+
+    def __init__(
+        self,
+        activities: list[str],
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(activities, parent=parent)
+
+    @property
+    def activity(self) -> str | None:
+        return self.selected
+
+
+class LeverageWidget(_ExclusiveToggleRow):
+    """Leverage selector as exclusive toggle buttons."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(list[str](get_args(Leverage)), parent=parent)
+
+    @property
+    def leverage(self) -> Leverage | None:
+        return cast(Leverage | None, self.selected)
+
+
+class MetricsGrid(QWidget):
+    """Two-column grid (label | widget)."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._grid = QGridLayout(self)
+        self._grid.setColumnStretch(0, 0)
+        self._grid.setColumnStretch(1, 1)
+        self._rows: list[QWidget] = []
+
+    def add_row(self, label_text: str, widget: QWidget) -> None:
+        row = len(self._rows)
+        label = QLabel(label_text, self)
+        self._grid.addWidget(
+            label,
+            row,
+            0,
+            QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter,
+        )
+        self._grid.addWidget(widget, row, 1)
+        self._rows.append(widget)

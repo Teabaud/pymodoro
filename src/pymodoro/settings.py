@@ -19,6 +19,13 @@ check_in:
     - "How present are you in what you do?"
     - "What do you want to focus on next?"
     - "What is your goal for the day?"
+  projects: []
+  activities:
+    - creating
+    - planning
+    - communicating
+    - learning
+    - admin
 """
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -34,6 +41,8 @@ class TimersSettings(BaseModel):
 
 class CheckInSettings(BaseModel):
     prompts: list[str]
+    projects: list[str] = []
+    activities: list[str] = []
 
 
 class AppSettings(BaseModel):

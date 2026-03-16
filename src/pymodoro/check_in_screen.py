@@ -1,18 +1,22 @@
-from __future__ import annotations
+from datetime import datetime, timezone
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from pymodoro.check_in_screen_widgets import (
+    ActivityWidget,
     ExerciseWidget,
     FocusRatingWidget,
+    LeverageWidget,
+    MetricsGrid,
+    ProjectWidget,
     PromptCard,
 )
-from pymodoro.metrics_io import CheckInSubmission
+from pymodoro.metrics_io import CheckInRecord
 from pymodoro.settings import AppSettings
 from pymodoro.tray import get_app_icon
 
 STYLESHEET = """
-QLabel {
+#PromptLabel {
     font-size: 32px;
     font-weight: 600;
 }
@@ -21,7 +25,11 @@ QPlainTextEdit {
     padding: 12px;
     min-height: 140px;
 }
-QLineEdit, QSpinBox {
+MetricsGrid QLabel {
+    font-size: 18px;
+    font-weight: 600;
+}
+QLineEdit, QSpinBox, QComboBox {
     font-size: 18px;
     padding: 8px;
 }
@@ -59,7 +67,12 @@ class CheckInScreen(QtWidgets.QDialog):
         self.setWindowIcon(get_app_icon())
 
         prompts = settings.check_in.prompts if settings is not None else []
+        projects = settings.check_in.projects if settings is not None else []
+        activities = settings.check_in.activities if settings is not None else []
         self._prompt_card = PromptCard(check_in_prompt, prompts=prompts, parent=self)
+        self._project_widget = ProjectWidget(projects, self)
+        self._activity_widget = ActivityWidget(activities, self)
+        self._leverage_widget = LeverageWidget(self)
         self._focus_rating_widget = FocusRatingWidget(self)
         self._exercise_widget = ExerciseWidget(self)
         self._submit_button = QtWidgets.QPushButton("Submit", self)
@@ -80,10 +93,20 @@ class CheckInScreen(QtWidgets.QDialog):
         layout.addStretch(2)
         layout.addWidget(self._prompt_card)
         layout.addSpacing(16)
-        metrics_layout = QtWidgets.QHBoxLayout()
-        metrics_layout.addWidget(self._focus_rating_widget)
-        metrics_layout.addWidget(self._exercise_widget)
-        layout.addLayout(metrics_layout)
+
+        self._metrics_grid = MetricsGrid(self)
+        self._metrics_grid.add_row("Project", self._project_widget)
+        self._metrics_grid.add_row("Activity", self._activity_widget)
+        self._metrics_grid.add_row("Leverage", self._leverage_widget)
+        self._metrics_grid.add_row("Focus", self._focus_rating_widget)
+        self._metrics_grid.add_row("Exercise", self._exercise_widget)
+
+        centered_layout = QtWidgets.QHBoxLayout()
+        centered_layout.addStretch(1)
+        centered_layout.addWidget(self._metrics_grid, 2)
+        centered_layout.addStretch(1)
+
+        layout.addLayout(centered_layout, 1)
         layout.addSpacing(24)
         buttons_layout = QtWidgets.QHBoxLayout()
         buttons_layout.addStretch(1)
@@ -95,8 +118,11 @@ class CheckInScreen(QtWidgets.QDialog):
 
     def showEvent(self, event: QtGui.QShowEvent) -> None:
         super().showEvent(event)
-        self._focus_rating_widget.set_rating(None)
+        self._focus_rating_widget.clear()
         self._exercise_widget.clear()
+        self._project_widget.clear()
+        self._activity_widget.clear()
+        self._leverage_widget.clear()
         self._prompt_card.clear()
         self.showFullScreen()
         self.raise_()
@@ -115,11 +141,15 @@ class CheckInScreen(QtWidgets.QDialog):
     def _on_submit(self) -> None:
         if self._prompt_card.answer == "":
             return
-        submission = CheckInSubmission(
+        record = CheckInRecord(
+            timestamp=datetime.now(timezone.utc),
             prompt=self._prompt_card.prompt,
             answer=self._prompt_card.answer,
             focus_rating=self._focus_rating_widget.rating,
             exercise_name=self._exercise_widget.exercise_name,
             exercise_rep_count=self._exercise_widget.rep_count,
+            project=self._project_widget.project,
+            activity=self._activity_widget.activity,
+            leverage=self._leverage_widget.leverage,
         )
-        self.submitted.emit(submission)
+        self.submitted.emit(record)

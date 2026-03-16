@@ -9,7 +9,7 @@ import pytest
 
 import pymodoro.app as app_module
 from pymodoro.app_ui_widgets.pages import Page
-from pymodoro.metrics_io import CheckInSubmission, MetricsLogger
+from pymodoro.metrics_io import CheckInRecord, MetricsLogger, SessionDurationRecord
 from pymodoro.session import SessionPhase
 from pymodoro.settings import AppSettings, CheckInSettings, TimersSettings
 
@@ -202,26 +202,24 @@ class DummyMetricsLogger:
         self.check_in_events: list[dict[str, Any]] = []
         self.session_duration_events: list[dict[str, Any]] = []
 
-    def log_check_in(self, submission: CheckInSubmission) -> None:
-        self.check_in_events.append(
-            {
-                "prompt": submission.prompt,
-                "answer": submission.answer,
-                "focus_rating": submission.focus_rating,
-                "exercise_name": submission.exercise_name,
-                "exercise_rep_count": submission.exercise_rep_count,
-            }
-        )
-
-    def log_phase_duration(
-        self, session_type: str, duration_sec: int, timestamp: Any = None
-    ) -> None:
-        self.session_duration_events.append(
-            {
-                "session_type": session_type,
-                "duration_sec": duration_sec,
-            }
-        )
+    def log_record(self, record: CheckInRecord | SessionDurationRecord) -> None:
+        if isinstance(record, CheckInRecord):
+            self.check_in_events.append(
+                {
+                    "prompt": record.prompt,
+                    "answer": record.answer,
+                    "focus_rating": record.focus_rating,
+                    "exercise_name": record.exercise_name,
+                    "exercise_rep_count": record.exercise_rep_count,
+                }
+            )
+        elif isinstance(record, SessionDurationRecord):
+            self.session_duration_events.append(
+                {
+                    "session_type": record.session_type,
+                    "duration_sec": record.duration_sec,
+                }
+            )
 
 
 @pytest.fixture(autouse=True)
@@ -463,7 +461,8 @@ def test_note_submit_closes_prompt(monkeypatch: Any, settings: AppSettings) -> N
     app_any._check_in_screen = prompt
 
     app._on_check_in_screen_submit(
-        CheckInSubmission(
+        CheckInRecord(
+            timestamp=datetime.now(timezone.utc),
             prompt="Break time?",
             answer="done",
             focus_rating=None,
@@ -485,7 +484,8 @@ def test_check_in_submit_creates_jsonl_log_record(
     monkeypatch.setattr(app_module, "MetricsLogger", MetricsLogger)
     app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
     app._on_check_in_screen_submit(
-        CheckInSubmission(
+        CheckInRecord(
+            timestamp=datetime.now(timezone.utc),
             prompt="Break time?",
             answer="done",
             focus_rating=None,
@@ -519,7 +519,8 @@ def test_check_in_submit_appends_multiple_jsonl_records(
     monkeypatch.setattr(app_module, "MetricsLogger", MetricsLogger)
     app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
     app._on_check_in_screen_submit(
-        CheckInSubmission(
+        CheckInRecord(
+            timestamp=datetime.now(timezone.utc),
             prompt="Break time?",
             answer="first",
             focus_rating=4,
@@ -528,7 +529,8 @@ def test_check_in_submit_appends_multiple_jsonl_records(
         )
     )
     app._on_check_in_screen_submit(
-        CheckInSubmission(
+        CheckInRecord(
+            timestamp=datetime.now(timezone.utc),
             prompt="Break time?",
             answer="second",
             focus_rating=None,

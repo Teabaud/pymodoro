@@ -118,18 +118,12 @@ class CalendarDataProvider:
             local_end = b.end.astimezone(local_tz)
             day = local_start.date()
             if week_start <= day < week_end:
-                local_check_ins = []
-                for ci in b.check_ins:
-                    local_check_ins.append(
-                        CheckInRecord(
-                            timestamp=ci.timestamp.astimezone(local_tz),
-                            prompt=ci.prompt,
-                            answer=ci.answer,
-                            focus_rating=ci.focus_rating,
-                            exercise_name=ci.exercise_name,
-                            exercise_rep_count=ci.exercise_rep_count,
-                        )
+                local_check_ins = [
+                    ci.model_copy(
+                        update={"timestamp": ci.timestamp.astimezone(local_tz)}
                     )
+                    for ci in b.check_ins
+                ]
                 result.append(
                     SessionBlock(
                         start=local_start,
@@ -218,6 +212,9 @@ class SessionCardItem(QtWidgets.QGraphicsRectItem):
         duration_min = (
             int(self.block.end.timestamp() - self.block.start.timestamp()) // 60
         )
+        label = self.block.session_type
+        if self.block.check_ins and self.block.check_ins[0].project:
+            label = self.block.check_ins[0].project
         if h >= CC["CARD_LABEL_FULL_HEIGHT_PX"]:
             font = painter.font()
             font.setPixelSize(11)
@@ -227,7 +224,7 @@ class SessionCardItem(QtWidgets.QGraphicsRectItem):
             painter.drawText(
                 text_rect,
                 QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignTop,
-                "Work",
+                label,
             )
             font.setBold(False)
             painter.setFont(font)
@@ -244,7 +241,7 @@ class SessionCardItem(QtWidgets.QGraphicsRectItem):
                 rect.adjusted(4, 1, -4, -1),
                 QtCore.Qt.AlignmentFlag.AlignLeft
                 | QtCore.Qt.AlignmentFlag.AlignVCenter,
-                f"Work {duration_min}m",
+                f"{label} {duration_min}m",
             )
 
     def hoverEnterEvent(self, event: QtWidgets.QGraphicsSceneHoverEvent) -> None:
@@ -673,12 +670,25 @@ class _SessionTooltip(QtWidgets.QFrame):
         start_str = block.start.strftime("%H:%M")
         end_str = block.end.strftime("%H:%M")
 
-        header = QtWidgets.QLabel(f"<b>Work</b> — {duration_min} min")
+        header_parts: list[str] = []
+        if block.check_ins:
+            ci = block.check_ins[0]
+            if ci.project:
+                header_parts.append(f"<b>{ci.project}</b>")
+            if ci.activity:
+                header_parts.append(ci.activity.capitalize())
+            if ci.leverage:
+                header_parts.append(f"{ci.leverage.capitalize()} leverage")
+        if not header_parts:
+            header_parts.append(f"<b>{block.session_type}</b>")
+        header = QtWidgets.QLabel(f"{' · '.join(header_parts)} — {duration_min} min")
         header.setStyleSheet("font-size: 13px;")
         layout.addWidget(header)
 
         time_label = QtWidgets.QLabel(f"{start_str} – {end_str}")
-        time_label.setStyleSheet(f"font-size: 12px; color: {disabled_text_color.name()};")
+        time_label.setStyleSheet(
+            f"font-size: 12px; color: {disabled_text_color.name()};"
+        )
         layout.addWidget(time_label)
 
         if block.check_ins:
@@ -702,12 +712,16 @@ class _SessionTooltip(QtWidgets.QFrame):
                     extras.append(ex)
                 if extras:
                     extra_lbl = QtWidgets.QLabel(" · ".join(extras))
-                    extra_lbl.setStyleSheet(f"font-size: 10px; color: {disabled_text_color.name()};")
+                    extra_lbl.setStyleSheet(
+                        f"font-size: 10px; color: {disabled_text_color.name()};"
+                    )
                     layout.addWidget(extra_lbl)
         else:
             layout.addWidget(self._make_separator())
             no_ci = QtWidgets.QLabel("No check-in recorded.")
-            no_ci.setStyleSheet(f"font-size: 11px; color: {disabled_text_color.name()};")
+            no_ci.setStyleSheet(
+                f"font-size: 11px; color: {disabled_text_color.name()};"
+            )
             layout.addWidget(no_ci)
 
         self.adjustSize()

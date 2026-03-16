@@ -6,8 +6,10 @@ from loguru import logger
 from pydantic import ValidationError
 
 from pymodoro.app_ui_widgets.settings_panel_widgets import (
+    ActivitiesSectionWidget,
     DurationSelectionDialog,
     NotificationsSectionWidget,
+    ProjectsSectionWidget,
     PromptsSectionWidget,
     SessionSectionWidget,
     TimersSectionWidget,
@@ -41,6 +43,8 @@ class SettingsDraft:
     break_duration: int
     snooze_duration: int
     check_in_prompts: list[str]
+    check_in_projects: list[str]
+    check_in_activities: list[str]
     notification_sound_enabled: bool
 
     @classmethod
@@ -50,6 +54,8 @@ class SettingsDraft:
             break_duration=settings.timers.break_duration,
             snooze_duration=settings.timers.snooze_duration,
             check_in_prompts=settings.check_in.prompts,
+            check_in_projects=settings.check_in.projects,
+            check_in_activities=settings.check_in.activities,
             notification_sound_enabled=settings.notification_sound_enabled,
         )
 
@@ -83,6 +89,14 @@ class SettingsPanel(QWidget):
             check_in_prompts=self._draft.check_in_prompts,
             parent=self,
         )
+        self._projects_group = ProjectsSectionWidget(
+            projects=self._draft.check_in_projects,
+            parent=self,
+        )
+        self._activities_group = ActivitiesSectionWidget(
+            activities=self._draft.check_in_activities,
+            parent=self,
+        )
         self._notifications_group = NotificationsSectionWidget(
             notification_sound_enabled=self._draft.notification_sound_enabled,
             parent=self,
@@ -95,6 +109,8 @@ class SettingsPanel(QWidget):
         self._session_group.startBreakClicked.connect(self._on_start_break_clicked)
         self._timers_group.changed.connect(self._mark_dirty)
         self._prompts_group.changed.connect(self._mark_dirty)
+        self._projects_group.changed.connect(self._mark_dirty)
+        self._activities_group.changed.connect(self._mark_dirty)
         self._notifications_group.changed.connect(self._mark_dirty)
         self._save_button.clicked.connect(self._save_settings)
         self._reset_button.clicked.connect(self._reset_settings)
@@ -105,6 +121,8 @@ class SettingsPanel(QWidget):
         layout.addWidget(self._timers_group)
         layout.addWidget(self._notifications_group)
         layout.addWidget(self._prompts_group)
+        layout.addWidget(self._projects_group)
+        layout.addWidget(self._activities_group)
         button_layout = QHBoxLayout()
         button_layout.addWidget(self._reset_button)
         button_layout.addStretch()
@@ -208,12 +226,16 @@ class SettingsPanel(QWidget):
         try:
             timers = self._timers_group.to_timers_settings()
             check_in_prompts = self._prompts_group.prompts_editor.get_prompts()
+            check_in_projects = self._projects_group.prompts_editor.get_prompts()
+            check_in_activities = self._activities_group.prompts_editor.get_prompts()
             sound_enabled = self._notifications_group.is_sound_enabled()
         except ValidationError as error:
             self._show_validation_error(error)
             return False
         self._settings.timers = timers
         self._settings.check_in.prompts = check_in_prompts
+        self._settings.check_in.projects = check_in_projects
+        self._settings.check_in.activities = check_in_activities
         self._settings.notification_sound_enabled = sound_enabled
         return True
 
@@ -235,6 +257,10 @@ class SettingsPanel(QWidget):
             self._timers_group.snooze_duration.blockSignals(False)
 
         self._prompts_group.prompts_editor.set_prompts(self._draft.check_in_prompts)
+        self._projects_group.prompts_editor.set_prompts(self._draft.check_in_projects)
+        self._activities_group.prompts_editor.set_prompts(
+            self._draft.check_in_activities
+        )
         self._notifications_group.set_sound_enabled(
             self._draft.notification_sound_enabled
         )
