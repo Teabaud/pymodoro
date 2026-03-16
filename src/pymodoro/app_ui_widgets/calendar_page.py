@@ -378,6 +378,8 @@ class CalendarGridView(QtWidgets.QWidget):
         self._week_start: date = date.today()
         self._day_count = 7
         self._active_tooltip: _SessionTooltip | None = None
+        self._col_w: float = 0.0  # Initialized in _rebuild_scene
+        self._grid_h: float = 0.0  # Initialized in _rebuild_scene
 
         self._header = _DayHeaderWidget(self)
         self._scene = QtWidgets.QGraphicsScene(self)
@@ -578,6 +580,9 @@ class CalendarGridView(QtWidgets.QWidget):
         self._time_indicator = indicator
 
     def _update_time_indicator(self) -> None:
+        if self._col_w == 0:  # Scene not yet built
+            return
+
         today = date.today()
         day_index = (today - self._week_start).days
         if day_index < 0 or day_index >= self._day_count:
