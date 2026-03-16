@@ -652,12 +652,17 @@ class _SessionTooltip(QtWidgets.QFrame):
         super().__init__(parent, QtCore.Qt.WindowType.ToolTip)
         self.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
         self.setStyleSheet(
-            "QFrame { background: palette(window); border: 1px solid palette(mid); "
+            "QFrame { border: 1px solid palette(mid); "
             "border-radius: 6px; padding: 8px; }"
             "QLabel { border: none; padding: 0; }"
         )
         layout = QtWidgets.QVBoxLayout(self)
         layout.setSpacing(4)
+
+        disabled_text_color = self.palette().color(
+            QtGui.QPalette.ColorGroup.Disabled,
+            QtGui.QPalette.ColorRole.WindowText,
+        )
 
         duration_min = int((block.end - block.start).total_seconds()) // 60
         start_str = block.start.strftime("%H:%M")
@@ -668,7 +673,7 @@ class _SessionTooltip(QtWidgets.QFrame):
         layout.addWidget(header)
 
         time_label = QtWidgets.QLabel(f"{start_str} – {end_str}")
-        time_label.setStyleSheet("font-size: 12px; color: palette(mid);")
+        time_label.setStyleSheet(f"font-size: 12px; color: {disabled_text_color.name()};")
         layout.addWidget(time_label)
 
         if block.check_ins:
@@ -692,12 +697,12 @@ class _SessionTooltip(QtWidgets.QFrame):
                     extras.append(ex)
                 if extras:
                     extra_lbl = QtWidgets.QLabel(" · ".join(extras))
-                    extra_lbl.setStyleSheet("font-size: 10px; color: palette(mid);")
+                    extra_lbl.setStyleSheet(f"font-size: 10px; color: {disabled_text_color.name()};")
                     layout.addWidget(extra_lbl)
         else:
             layout.addWidget(self._make_separator())
             no_ci = QtWidgets.QLabel("No check-in recorded.")
-            no_ci.setStyleSheet("font-size: 11px; color: palette(mid);")
+            no_ci.setStyleSheet(f"font-size: 11px; color: {disabled_text_color.name()};")
             layout.addWidget(no_ci)
 
         self.adjustSize()
