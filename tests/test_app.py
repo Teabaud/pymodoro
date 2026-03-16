@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import json
 import random
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, cast
 
 import pytest
 
 import pymodoro.app as app_module
 from pymodoro.app_ui_widgets.pages import Page
-from pymodoro.metrics_io import CheckInRecord, MetricsLogger, SessionDurationRecord
-from pymodoro.session import SessionPhase
+from pymodoro.metrics_io import CheckInRecord, MetricsLogger, SessionRecord
+from pymodoro.session import PhaseTransition, SessionPhase
 from pymodoro.settings import AppSettings, CheckInSettings, TimersSettings
 
 
@@ -200,9 +200,9 @@ class DummyNotificationSoundPlayer:
 class DummyMetricsLogger:
     def __init__(self, *_: Any, **__: Any) -> None:
         self.check_in_events: list[dict[str, Any]] = []
-        self.session_duration_events: list[dict[str, Any]] = []
+        self.session_events: list[dict[str, Any]] = []
 
-    def log_record(self, record: CheckInRecord | SessionDurationRecord) -> None:
+    def log_record(self, record: CheckInRecord | SessionRecord) -> None:
         if isinstance(record, CheckInRecord):
             self.check_in_events.append(
                 {
@@ -213,11 +213,12 @@ class DummyMetricsLogger:
                     "exercise_rep_count": record.exercise_rep_count,
                 }
             )
-        elif isinstance(record, SessionDurationRecord):
-            self.session_duration_events.append(
+        elif isinstance(record, SessionRecord):
+            self.session_events.append(
                 {
                     "session_type": record.session_type,
-                    "duration_sec": record.duration_sec,
+                    "start_timestamp": record.start_timestamp,
+                    "end_timestamp": record.end_timestamp,
                 }
             )
 
@@ -420,8 +421,14 @@ def test_phase_change_hides_warning_toast(
     app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
     tray_controller = cast(DummyTrayController, app._tray_controller)
 
+    now = datetime.now(timezone.utc)
     app._sp_manager.phaseChanged.emit(
-        SessionPhase.WORK, SessionPhase.BREAK, 120, datetime.now(timezone.utc)
+        PhaseTransition(
+            previous_phase=SessionPhase.WORK,
+            current_phase=SessionPhase.BREAK,
+            start_timestamp=now - timedelta(seconds=120),
+            end_timestamp=now,
+        )
     )
 
     assert tray_controller.hide_phase_end_toast_called == 1
@@ -443,8 +450,14 @@ def test_pause_to_work_phase_change_plays_sound(
 
     app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
 
+    now = datetime.now(timezone.utc)
     app._sp_manager.phaseChanged.emit(
-        SessionPhase.BREAK, SessionPhase.WORK, 120, datetime.now(timezone.utc)
+        PhaseTransition(
+            previous_phase=SessionPhase.BREAK,
+            current_phase=SessionPhase.WORK,
+            start_timestamp=now - timedelta(seconds=120),
+            end_timestamp=now,
+        )
     )
 
     assert sound_player.play_calls == 1
@@ -556,7 +569,7 @@ def test_check_in_submit_appends_multiple_jsonl_records(
     assert "exercise_rep_count" not in second_record
 
 
-def test_phase_change_logs_session_duration_row(
+def test_phase_change_logs_session_record(
     monkeypatch: Any, settings: AppSettings
 ) -> None:
     monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
@@ -567,19 +580,27 @@ def test_phase_change_logs_session_duration_row(
     )
 
     monkeypatch.setattr(app_module, "MetricsLogger", MetricsLogger)
+    now = datetime.now(timezone.utc)
+    start = now - timedelta(seconds=42)
     app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
     app._on_phase_changed(
-        SessionPhase.BREAK, SessionPhase.WORK, 42, datetime.now(timezone.utc)
+        PhaseTransition(
+            previous_phase=SessionPhase.BREAK,
+            current_phase=SessionPhase.WORK,
+            start_timestamp=start,
+            end_timestamp=now,
+        )
     )
 
     lines = settings.metrics_log_path.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 1
 
     record = json.loads(lines[0])
-    assert record["record_type"] == "session_duration"
+    assert record["record_type"] == "session"
     assert record["session_type"] == "Break"
-    assert isinstance(record["duration_sec"], int) is True
-    assert record["duration_sec"] == 42
+    assert "start_timestamp" in record
+    assert "end_timestamp" in record
+    assert "duration_sec" not in record
     assert "prompt" not in record
     assert "answer" not in record
     assert "focus_rating" not in record
@@ -655,11 +676,22 @@ def test_phase_change_updates_open_settings_paused_state(
     app_window = cast(DummyAppWindow, app._app_window)
     settings_panel = cast(DummySettingsPanel, app_window.get_settings_panel())
 
+    now = datetime.now(timezone.utc)
     app._sp_manager.phaseChanged.emit(
-        SessionPhase.WORK, SessionPhase.PAUSE, 300, datetime.now(timezone.utc)
+        PhaseTransition(
+            previous_phase=SessionPhase.WORK,
+            current_phase=SessionPhase.PAUSE,
+            start_timestamp=now - timedelta(seconds=300),
+            end_timestamp=now,
+        )
     )
     app._sp_manager.phaseChanged.emit(
-        SessionPhase.PAUSE, SessionPhase.WORK, 60, datetime.now(timezone.utc)
+        PhaseTransition(
+            previous_phase=SessionPhase.PAUSE,
+            current_phase=SessionPhase.WORK,
+            start_timestamp=now,
+            end_timestamp=now + timedelta(seconds=60),
+        )
     )
 
     assert settings_panel.paused_states == [False, True, False]

@@ -11,7 +11,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from pymodoro.metrics_io import (
     CheckInRecord,
     SessionBlock,
-    SessionDurationRecord,
+    SessionRecord,
     read_records,
 )
 from pymodoro.settings import AppSettings
@@ -41,13 +41,13 @@ CC = CALENDAR_CONSTANTS  # shorthand
 
 
 def build_session_blocks(
-    records: Sequence[SessionDurationRecord | CheckInRecord],
+    records: Sequence[SessionRecord | CheckInRecord],
 ) -> list[SessionBlock]:
     """Build Work-only SessionBlocks with associated check-ins, sorted by start."""
-    sessions: list[SessionDurationRecord] = []
+    sessions: list[SessionRecord] = []
     check_ins: list[CheckInRecord] = []
     for r in records:
-        if isinstance(r, SessionDurationRecord):
+        if isinstance(r, SessionRecord):
             sessions.append(r)
         elif isinstance(r, CheckInRecord):
             check_ins.append(r)
@@ -57,9 +57,12 @@ def build_session_blocks(
     for s in sessions:
         if s.session_type != "Work":
             continue
-        start = s.timestamp - timedelta(seconds=s.duration_sec)
         blocks.append(
-            SessionBlock(start=start, end=s.timestamp, session_type=s.session_type)
+            SessionBlock(
+                start=s.start_timestamp,
+                end=s.end_timestamp,
+                session_type=s.session_type,
+            )
         )
 
     blocks.sort(key=lambda b: b.start)

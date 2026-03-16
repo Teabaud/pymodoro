@@ -29,12 +29,12 @@ class CheckInRecord(BaseModel):
     leverage: Leverage | None = None
 
 
-class SessionDurationRecord(BaseModel):
+class SessionRecord(BaseModel):
     model_config = ConfigDict(frozen=True, populate_by_name=True)
-    record_type: Literal["session_duration"] = "session_duration"
-    timestamp: datetime = Field()
+    record_type: Literal["session"] = "session"
+    start_timestamp: datetime
+    end_timestamp: datetime
     session_type: str
-    duration_sec: int
 
 
 # ---------------------------------------------------------------------------
@@ -42,13 +42,11 @@ class SessionDurationRecord(BaseModel):
 # ---------------------------------------------------------------------------
 
 RawRecord = Annotated[
-    SessionDurationRecord | CheckInRecord,
+    SessionRecord | CheckInRecord,
     Field(discriminator="record_type"),
 ]
 
-_record_adapter: TypeAdapter[SessionDurationRecord | CheckInRecord] = TypeAdapter(
-    RawRecord
-)
+_record_adapter: TypeAdapter[SessionRecord | CheckInRecord] = TypeAdapter(RawRecord)
 
 
 # ---------------------------------------------------------------------------
@@ -69,11 +67,11 @@ class SessionBlock:
 # ---------------------------------------------------------------------------
 
 
-def read_records(log_path: Path) -> list[SessionDurationRecord | CheckInRecord]:
+def read_records(log_path: Path) -> list[SessionRecord | CheckInRecord]:
     """Parse NDJSON file into typed records, skipping invalid lines."""
     if not log_path.exists():
         return []
-    records: list[SessionDurationRecord | CheckInRecord] = []
+    records: list[SessionRecord | CheckInRecord] = []
     with log_path.open("r", encoding="utf-8") as fp:
         for line_no, raw_line in enumerate(fp, 1):
             raw_line = raw_line.strip()
@@ -100,7 +98,7 @@ class MetricsLogger:
         self._log_path = Path(log_path)
         self._ensure_log_file_exists()
 
-    def log_record(self, record: SessionDurationRecord | CheckInRecord) -> None:
+    def log_record(self, record: SessionRecord | CheckInRecord) -> None:
         self._ensure_log_file_exists()
         with self._log_path.open("a", encoding="utf-8") as log_file:
             dump = record.model_dump_json(by_alias=True, exclude_none=True)

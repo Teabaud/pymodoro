@@ -1,5 +1,4 @@
 import random
-from datetime import datetime
 
 from loguru import logger
 
@@ -7,9 +6,10 @@ from pymodoro.app_ui import AppWindow
 from pymodoro.app_ui_widgets.pages import Page
 from pymodoro.app_ui_widgets.settings_panel import SettingsPanel
 from pymodoro.check_in_screen import CheckInScreen
-from pymodoro.metrics_io import CheckInRecord, MetricsLogger, SessionDurationRecord
+from pymodoro.metrics_io import CheckInRecord, MetricsLogger, SessionRecord
 from pymodoro.notification_sound import NotificationSoundPlayer
 from pymodoro.session import (
+    PhaseTransition,
     SessionPhase,
     SessionPhaseManager,
 )
@@ -92,25 +92,22 @@ class PomodoroApp(QtCore.QObject):
         if self._settings.notification_sound_enabled:
             self._notification_sound_player.play()
 
-    def _on_phase_changed(
-        self,
-        previous_phase: SessionPhase,
-        current_phase: SessionPhase,
-        previous_phase_duration: int,
-        end_timestamp: datetime,
-    ) -> None:
+    def _on_phase_changed(self, transition: PhaseTransition) -> None:
         self._tray_controller.refresh()
         self._tray_controller.hide_phase_end_toast()
-        if previous_phase == SessionPhase.BREAK and current_phase == SessionPhase.WORK:
+        if (
+            transition.previous_phase == SessionPhase.BREAK
+            and transition.current_phase == SessionPhase.WORK
+        ):
             self._play_notification_sound()
         if self._app_window:
             settings_panel = self._app_window.get_settings_panel()
-            settings_panel.set_paused(current_phase == SessionPhase.PAUSE)
+            settings_panel.set_paused(transition.current_phase == SessionPhase.PAUSE)
 
-        record = SessionDurationRecord(
-            timestamp=end_timestamp,
-            session_type=previous_phase,
-            duration_sec=max(0, previous_phase_duration),
+        record = SessionRecord(
+            start_timestamp=transition.start_timestamp,
+            end_timestamp=transition.end_timestamp,
+            session_type=transition.previous_phase,
         )
         self._metrics_logger.log_record(record)
 

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from enum import Enum
+from typing import cast
 
 from loguru import logger
 
@@ -15,14 +17,26 @@ PHASE_CHANGE_WARNING_SEC = 60
 SLEEP_GAP_THRESHOLD_SEC = 30
 
 
+def _qdatetime_to_utc(qdt: QtCore.QDateTime) -> datetime:
+    return cast(datetime, qdt.toPython()).astimezone(timezone.utc)
+
+
 class SessionPhase(str, Enum):
     WORK = "Work"
     BREAK = "Break"
     PAUSE = "Pause"
 
 
+@dataclass(frozen=True)
+class PhaseTransition:
+    previous_phase: SessionPhase
+    current_phase: SessionPhase
+    start_timestamp: datetime
+    end_timestamp: datetime
+
+
 class SleepRecoveryTimer(QtCore.QObject):
-    finished = QtCore.Signal(int)
+    finished = QtCore.Signal(object)  # datetime – effective end time (UTC)
     phaseEndingSoon = QtCore.Signal()
 
     def __init__(
@@ -51,6 +65,7 @@ class SleepRecoveryTimer(QtCore.QObject):
         self._ends_at: QtCore.QDateTime | None = None
         self._started_at: QtCore.QDateTime | None = None
         self._last_heartbeat_at: QtCore.QDateTime | None = None
+        self._effective_end: datetime | None = None
         self._accumulated_sleep_seconds: int = 0
 
     def start(self, seconds: int) -> None:
@@ -59,6 +74,7 @@ class SleepRecoveryTimer(QtCore.QObject):
         self._ends_at = now.addSecs(duration_seconds)
         self._started_at = now
         self._last_heartbeat_at = now
+        self._effective_end = None
         self._accumulated_sleep_seconds = 0
 
         self._phase_timer.stop()
@@ -76,6 +92,7 @@ class SleepRecoveryTimer(QtCore.QObject):
         self._ends_at = None
         self._started_at = None
         self._last_heartbeat_at = None
+        self._effective_end = None
         self._accumulated_sleep_seconds = 0
 
     def extend(self, seconds: int) -> None:
@@ -107,42 +124,47 @@ class SleepRecoveryTimer(QtCore.QObject):
     def started_at(self) -> datetime | None:
         if self._started_at is None:
             return None
-        return self._started_at.toPython().astimezone(timezone.utc)
+        return _qdatetime_to_utc(self._started_at)
+
+    def effective_end(self) -> datetime | None:
+        return self._effective_end
 
     def ends_at(self) -> QtCore.QDateTime | None:
         return self._ends_at
 
-    def _detect_sleep_gap(self, now: QtCore.QDateTime) -> int:
-        """Returns the sleep gap in seconds, or 0 if no gap was detected."""
-        gap_seconds = 0
+    def _detect_sleep_gap(self, now: QtCore.QDateTime) -> QtCore.QDateTime | None:
+        """Returns the approximate fell-asleep time, or None if no gap."""
+        fell_asleep_at = None
         if self._last_heartbeat_at is not None:
             elapsed = self._last_heartbeat_at.secsTo(now)
             if elapsed > self._sleep_gap_threshold_sec:
-                gap_seconds = elapsed
+                fell_asleep_at = self._last_heartbeat_at
+                self._accumulated_sleep_seconds += elapsed
         self._last_heartbeat_at = now
-        return gap_seconds
+        return fell_asleep_at
 
     def _on_phase_timer_timeout(self) -> None:
         self._phase_warning_timer.stop()
-        self.finished.emit(0)
+        self._effective_end = _qdatetime_to_utc(QtCore.QDateTime.currentDateTime())
+        self.finished.emit(self._effective_end)
 
     def _on_heartbeat_timeout(self) -> None:
         now = QtCore.QDateTime.currentDateTime()
-        gap_seconds = self._detect_sleep_gap(now)
-        if gap_seconds:
-            self._accumulated_sleep_seconds += gap_seconds
-            self._recover_after_sleep(now)
+        fell_asleep_at = self._detect_sleep_gap(now)
+        if fell_asleep_at is not None:
+            self._recover_after_sleep(fell_asleep_at)
 
-    def _recover_after_sleep(self, now: QtCore.QDateTime) -> None:
+    def _recover_after_sleep(self, fell_asleep_at: QtCore.QDateTime) -> None:
         if self._ends_at is None:
             return
 
+        now = QtCore.QDateTime.currentDateTime()
         remaining_seconds = now.secsTo(self._ends_at)
         if remaining_seconds <= 0:
-            missed_by_seconds = abs(remaining_seconds)
             self._phase_timer.stop()
             self._phase_warning_timer.stop()
-            self.finished.emit(missed_by_seconds)
+            self._effective_end = _qdatetime_to_utc(fell_asleep_at)
+            self.finished.emit(self._effective_end)
             return
 
         self._phase_timer.stop()
@@ -163,7 +185,7 @@ class SleepRecoveryTimer(QtCore.QObject):
 
 
 class SessionPhaseManager(QtCore.QObject):
-    phaseChanged = QtCore.Signal(SessionPhase, SessionPhase, int, object)
+    phaseChanged = QtCore.Signal(PhaseTransition)
     phaseEndingSoon = QtCore.Signal(SessionPhase)
     workEnded = QtCore.Signal()
     breakEnded = QtCore.Signal()
@@ -192,7 +214,9 @@ class SessionPhaseManager(QtCore.QObject):
         if self._phase == SessionPhase.PAUSE:
             self.start_work_phase()
 
-    def _on_timer_finished(self, missed_by_seconds: int) -> None:
+    def _on_timer_finished(self, effective_end: datetime) -> None:
+        now = datetime.now(timezone.utc)
+        missed_by_seconds = int((now - effective_end).total_seconds())
         if missed_by_seconds > LATE_FINISH_RESTART_THRESHOLD_SEC:
             logger.warning(f"Phase late by {missed_by_seconds}s. Restarting.")
             self.start()
@@ -225,17 +249,17 @@ class SessionPhaseManager(QtCore.QObject):
 
     def _start_phase(self, phase: SessionPhase, seconds: int) -> None:
         previous_phase = self._phase
-        previous_phase_duration = self._timer.elapsed_seconds()
         started_at = self._timer.started_at()
-        end_timestamp = (
-            started_at + timedelta(seconds=previous_phase_duration)
-            if started_at is not None
-            else datetime.now(timezone.utc)
+        effective_end = self._timer.effective_end()
+        now = _qdatetime_to_utc(QtCore.QDateTime.currentDateTime())
+        transition = PhaseTransition(
+            previous_phase=previous_phase,
+            current_phase=phase,
+            start_timestamp=started_at or now,
+            end_timestamp=effective_end or now,
         )
         self._phase = phase
-        self.phaseChanged.emit(
-            previous_phase, phase, previous_phase_duration, end_timestamp
-        )
+        self.phaseChanged.emit(transition)
         self._timer.start(seconds)
         logger.info(str(self))
 

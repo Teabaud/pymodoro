@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from PySide6 import QtCore
 from PySide6.QtCore import QDateTime
@@ -10,11 +11,16 @@ from pymodoro.session import (
     LATE_FINISH_RESTART_THRESHOLD_SEC,
     PHASE_CHANGE_WARNING_SEC,
     SLEEP_GAP_THRESHOLD_SEC,
+    PhaseTransition,
     SessionPhase,
     SessionPhaseManager,
     SleepRecoveryTimer,
 )
 from pymodoro.settings import AppSettings, CheckInSettings, TimersSettings
+
+
+def _now_utc() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 def _make_settings(
@@ -82,7 +88,7 @@ def test_timeout_work_phase_transitions_to_break_and_emits_work_ended() -> None:
     sp_manager.workEnded.connect(lambda: work_ended.append(True))
 
     sp_manager.start()
-    sp_manager._on_timer_finished(0)
+    sp_manager._on_timer_finished(_now_utc())
 
     assert work_ended == [True]
     assert sp_manager.session_phase == SessionPhase.BREAK
@@ -97,7 +103,7 @@ def test_timeout_break_phase_emits_break_ended_and_stays_frozen() -> None:
     sp_manager.breakEnded.connect(lambda: break_ended.append(True))
 
     sp_manager.start_break_phase()
-    sp_manager._on_timer_finished(0)
+    sp_manager._on_timer_finished(_now_utc())
 
     assert break_ended == [True]
     assert sp_manager.session_phase == SessionPhase.BREAK
@@ -157,32 +163,38 @@ def test_manual_start_methods_force_switch_from_pause_and_other_phase(
     assert sp_manager._timer._phase_timer.interval() == 2_000
 
 
-def test_sleep_recovery_timer_emits_zero_missed_by_on_normal_timeout() -> None:
+def test_sleep_recovery_timer_emits_effective_end_on_normal_timeout() -> None:
     timer = SleepRecoveryTimer()
-    completed: list[int] = []
+    completed: list[datetime] = []
     timer.finished.connect(completed.append)
 
     timer.start(1)
     timer._on_phase_timer_timeout()
 
-    assert completed == [0]
+    assert len(completed) == 1
+    assert isinstance(completed[0], datetime)
+    assert (datetime.now(timezone.utc) - completed[0]).total_seconds() < 2
 
 
-def test_sleep_recovery_timer_emits_missed_by_when_sleep_passes_deadline(
+def test_sleep_recovery_timer_emits_fell_asleep_time_when_sleep_passes_deadline(
     monkeypatch: Any,
 ) -> None:
     timer = SleepRecoveryTimer()
     fixed_now = QDateTime.fromString("2025-01-01 10:00", "yyyy-MM-dd HH:mm")
     now_box = {"current": fixed_now}
     monkeypatch.setattr(QDateTime, "currentDateTime", lambda: now_box["current"])
-    completed: list[int] = []
+    completed: list[datetime] = []
     timer.finished.connect(completed.append)
 
     timer.start(120)
     now_box["current"] = fixed_now.addSecs(8 * 3600)
     timer._on_heartbeat_timeout()
 
-    assert completed == [28_680]
+    assert len(completed) == 1
+    # The emitted time should be the fell-asleep time (10:00), not wake-up time (18:00)
+    fell_asleep = completed[0]
+    expected = cast(datetime, fixed_now.toPython()).astimezone(timezone.utc)
+    assert fell_asleep == expected
     assert timer.remaining_seconds() == -1
 
 
@@ -240,7 +252,7 @@ def test_manager_transitions_on_late_finish_and_emits_work_end() -> None:
     sp_manager.workEnded.connect(lambda: work_ended.append(True))
 
     sp_manager.start_work_phase(seconds=1)
-    sp_manager._on_timer_finished(1)
+    sp_manager._on_timer_finished(_now_utc())
 
     assert work_ended == [True]
     assert sp_manager.session_phase == SessionPhase.BREAK
@@ -253,11 +265,39 @@ def test_manager_restarts_fresh_session_when_finish_is_far_too_late() -> None:
     sp_manager.workEnded.connect(lambda: work_ended.append(True))
 
     sp_manager.start_work_phase(seconds=1)
-    sp_manager._on_timer_finished(LATE_FINISH_RESTART_THRESHOLD_SEC + 1)
+    long_ago = _now_utc() - timedelta(seconds=LATE_FINISH_RESTART_THRESHOLD_SEC + 1)
+    sp_manager._on_timer_finished(long_ago)
 
     assert work_ended == []
     assert sp_manager.session_phase == SessionPhase.WORK
     assert sp_manager._timer._phase_timer.interval() == 10_000
+
+
+def test_overnight_sleep_logs_fell_asleep_time_not_wake_time(
+    monkeypatch: Any,
+) -> None:
+    """When the computer sleeps overnight, the logged session should end
+    at the fell-asleep time, not the wake-up time."""
+    settings = _make_settings(work_duration=1500, break_duration=5, snooze_duration=2)
+    sp_manager = SessionPhaseManager(settings=settings)
+    fixed_now = QDateTime.fromString("2025-01-15 22:00", "yyyy-MM-dd HH:mm")
+    now_box = {"current": fixed_now}
+    monkeypatch.setattr(QDateTime, "currentDateTime", lambda: now_box["current"])
+    transitions: list[PhaseTransition] = []
+    sp_manager.phaseChanged.connect(lambda t: transitions.append(t))
+
+    sp_manager.start_work_phase(seconds=1500)  # 25-minute work session
+    # Computer goes to sleep at 22:10, wakes at 06:00
+    now_box["current"] = fixed_now.addSecs(8 * 3600)  # 06:00 next day
+    sp_manager._timer._on_heartbeat_timeout()
+
+    # The restart should have emitted a phaseChanged transition
+    restart_transition = transitions[-1]
+    assert restart_transition.previous_phase == SessionPhase.WORK
+    assert restart_transition.current_phase == SessionPhase.WORK
+    # end_timestamp should be ~22:00 (fell-asleep time), not 06:00 (wake-up time)
+    expected_fell_asleep = cast(datetime, fixed_now.toPython()).astimezone(timezone.utc)
+    assert restart_transition.end_timestamp == expected_fell_asleep
 
 
 def test_manager_time_left_str_uses_remaining_seconds(monkeypatch: Any) -> None:
@@ -313,28 +353,28 @@ def test_phase_changed_emits_previous_phase_duration(monkeypatch: Any) -> None:
     fixed_now = QDateTime.fromString("2025-01-01 10:00", "yyyy-MM-dd HH:mm")
     now_box = {"current": fixed_now}
     monkeypatch.setattr(QDateTime, "currentDateTime", lambda: now_box["current"])
-    changes: list[tuple[SessionPhase, SessionPhase, int]] = []
-    sp_manager.phaseChanged.connect(
-        lambda prev, curr, dur: changes.append((prev, curr, dur))
-    )
+    transitions: list[PhaseTransition] = []
+    sp_manager.phaseChanged.connect(lambda t: transitions.append(t))
 
     sp_manager.start_work_phase(seconds=100)
     now_box["current"] = fixed_now.addSecs(42)
     sp_manager.start_break_phase(seconds=100)
 
-    assert changes[-1] == (SessionPhase.WORK, SessionPhase.BREAK, 42)
+    t = transitions[-1]
+    assert t.previous_phase == SessionPhase.WORK
+    assert t.current_phase == SessionPhase.BREAK
+    duration = int((t.end_timestamp - t.start_timestamp).total_seconds())
+    assert duration == 42
 
 
-def test_phase_changed_duration_excludes_sleep_time(monkeypatch: Any) -> None:
+def test_phase_changed_end_timestamp_is_wall_clock(monkeypatch: Any) -> None:
     settings = _make_settings(work_duration=900, break_duration=5, snooze_duration=2)
     sp_manager = SessionPhaseManager(settings=settings)
     fixed_now = QDateTime.fromString("2025-01-01 10:00", "yyyy-MM-dd HH:mm")
     now_box = {"current": fixed_now}
     monkeypatch.setattr(QDateTime, "currentDateTime", lambda: now_box["current"])
-    changes: list[tuple[SessionPhase, SessionPhase, int]] = []
-    sp_manager.phaseChanged.connect(
-        lambda prev, curr, dur: changes.append((prev, curr, dur))
-    )
+    transitions: list[PhaseTransition] = []
+    sp_manager.phaseChanged.connect(lambda t: transitions.append(t))
 
     sp_manager.start_work_phase(seconds=900)
     now_box["current"] = fixed_now.addSecs(45)
@@ -342,7 +382,11 @@ def test_phase_changed_duration_excludes_sleep_time(monkeypatch: Any) -> None:
     now_box["current"] = fixed_now.addSecs(900)
     sp_manager.start_break_phase(seconds=100)
 
-    assert changes[-1] == (SessionPhase.WORK, SessionPhase.BREAK, 900 - 45)
+    t = transitions[-1]
+    assert t.previous_phase == SessionPhase.WORK
+    assert t.current_phase == SessionPhase.BREAK
+    duration = int((t.end_timestamp - t.start_timestamp).total_seconds())
+    assert duration == 900  # wall-clock time, sleep not subtracted
 
 
 def test_elapsed_seconds_excludes_sleep_gaps(monkeypatch: Any) -> None:
