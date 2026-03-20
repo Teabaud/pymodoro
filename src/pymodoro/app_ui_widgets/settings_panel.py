@@ -4,12 +4,9 @@ from loguru import logger
 from pydantic import ValidationError
 
 from pymodoro.app_ui_widgets.settings_panel_widgets import (
-    ActivitiesSectionWidget,
     DurationSelectionDialog,
-    ExercisesSectionWidget,
+    ListSectionWidget,
     NotificationsSectionWidget,
-    ProjectsSectionWidget,
-    PromptsSectionWidget,
     SessionSectionWidget,
     TimersSectionWidget,
 )
@@ -60,20 +57,28 @@ class SettingsPanel(QWidget):
             snooze_duration=settings.timers.snooze_duration,
             parent=self,
         )
-        self._prompts_group = PromptsSectionWidget(
-            check_in_prompts=settings.check_in.prompts,
+        self._prompts_group = ListSectionWidget(
+            title="Check-in Prompts",
+            items=settings.check_in.prompts,
+            placeholder="Add prompt and press Enter...",
             parent=self,
         )
-        self._projects_group = ProjectsSectionWidget(
-            projects=settings.check_in.projects,
+        self._projects_group = ListSectionWidget(
+            title="Projects",
+            items=settings.check_in.projects,
+            placeholder="Add project and press Enter...",
             parent=self,
         )
-        self._exercises_group = ExercisesSectionWidget(
-            exercises=settings.check_in.exercises,
+        self._exercises_group = ListSectionWidget(
+            title="Exercises",
+            items=settings.check_in.exercises,
+            placeholder="Add exercise and press Enter...",
             parent=self,
         )
-        self._activities_group = ActivitiesSectionWidget(
-            activities=settings.check_in.activities,
+        self._activities_group = ListSectionWidget(
+            title="Activities",
+            items=settings.check_in.activities,
+            placeholder="Add activity and press Enter...",
             parent=self,
         )
         self._notifications_group = NotificationsSectionWidget(
@@ -163,10 +168,10 @@ class SettingsPanel(QWidget):
     def _auto_save(self) -> None:
         try:
             timers = self._timers_group.to_timers_settings()
-            check_in_prompts = self._prompts_group.prompts_editor.get_prompts()
-            check_in_projects = self._projects_group.prompts_editor.get_prompts()
-            check_in_exercises = self._exercises_group.prompts_editor.get_prompts()
-            check_in_activities = self._activities_group.prompts_editor.get_prompts()
+            check_in_prompts = self._prompts_group.list_editor.get_items()
+            check_in_projects = self._projects_group.list_editor.get_items()
+            check_in_exercises = self._exercises_group.list_editor.get_items()
+            check_in_activities = self._activities_group.list_editor.get_items()
             sound_enabled = self._notifications_group.is_sound_enabled()
         except ValidationError:
             logger.debug("Skipping auto-save: validation failed")

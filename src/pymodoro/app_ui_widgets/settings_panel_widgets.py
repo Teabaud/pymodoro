@@ -9,13 +9,10 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
-    QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QListWidget,
-    QListWidgetItem,
     QPushButton,
     QSizePolicy,
     QSpinBox,
@@ -23,231 +20,95 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-DRAG_HANDLE_CHAR = "\u22ee"
 DELETE_CHAR = "\u00d7"
 DURATION_INPUT_MAX_WIDTH = 120
 
 
-class CheckInPromptRowWidget(QFrame):
-    textChanged = QtCore.Signal()
-    deleteRequested = QtCore.Signal(object)
-    blurRequested = QtCore.Signal(object)
+class ListEditorRow(QWidget):
+    deleteClicked = QtCore.Signal()
 
-    def __init__(
-        self,
-        check_in_prompt: str,
-        can_delete: bool,
-        placeholder: str = "Enter check-in prompt...",
-        parent: QWidget | None = None,
-    ) -> None:
+    def __init__(self, text: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setFrameShape(QFrame.Shape.StyledPanel)
-        self.setLineWidth(1)
-        self.setFixedHeight(32)
-        self.setSizePolicy(
-            QSizePolicy.Policy.Preferred,
-            QSizePolicy.Policy.Fixed,
-        )
+        row_layout = QHBoxLayout(self)
+        row_layout.setContentsMargins(4, 2, 4, 2)
+        row_layout.setSpacing(6)
 
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(6, 4, 6, 4)
-        layout.setSpacing(6)
+        self._label = QLabel(text)
+        self._label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        row_layout.addWidget(self._label, 1)
 
-        drag_handle = QLabel(DRAG_HANDLE_CHAR)
-        drag_handle.setToolTip("Drag to reorder")
-        drag_handle.setCursor(QtCore.Qt.CursorShape.SizeAllCursor)
-        drag_handle.setFixedWidth(18)
-        layout.addWidget(drag_handle)
-
-        self._line_edit = QLineEdit(check_in_prompt)
-        self._line_edit.setPlaceholderText(placeholder)
-        self._line_edit.textChanged.connect(lambda _: self.textChanged.emit())
-        self._line_edit.installEventFilter(self)
-        self._line_edit.editingFinished.connect(lambda: self.blurRequested.emit(self))
-        layout.addWidget(self._line_edit, 1)
-
-        self._delete_btn = QPushButton(DELETE_CHAR)
-        self._delete_btn.setToolTip("Delete check-in prompt")
-        self._delete_btn.setFixedSize(28, 28)
-        self._delete_btn.clicked.connect(lambda: self.deleteRequested.emit(self))
-        layout.addWidget(self._delete_btn)
-        self.set_can_delete(can_delete)
+        delete_btn = QPushButton(DELETE_CHAR)
+        delete_btn.setFixedSize(24, 24)
+        delete_btn.clicked.connect(self.deleteClicked.emit)
+        row_layout.addWidget(delete_btn)
 
     def text(self) -> str:
-        return self._line_edit.text()
-
-    def focus_editor(self) -> None:
-        self._line_edit.setFocus()
-
-    def set_can_delete(self, can_delete: bool) -> None:
-        self._delete_btn.setVisible(can_delete)
-        self._delete_btn.setEnabled(can_delete)
-
-    def eventFilter(self, watched: QtCore.QObject, event: QtCore.QEvent) -> bool:
-        if watched is self._line_edit and event.type() == QtCore.QEvent.Type.FocusOut:
-            QtCore.QTimer.singleShot(0, lambda: self.blurRequested.emit(self))
-        return super().eventFilter(watched, event)
+        return self._label.text()
 
 
-class PromptsEditor(QWidget):
+class ListEditor(QWidget):
     changed = QtCore.Signal()
-    canAddChanged = QtCore.Signal(bool)
 
     def __init__(
         self,
-        placeholder: str = "Enter check-in prompt...",
+        placeholder: str = "Add item and press Enter...",
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self._placeholder = placeholder
-        self._list = QListWidget()
-        self._has_empty_prompt = False
-        self._list.setAlternatingRowColors(False)
-        self._list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
-        self._list.setDragEnabled(True)
-        self._list.setAcceptDrops(True)
-        self._list.setDropIndicatorShown(True)
-        self._list.setDefaultDropAction(QtCore.Qt.DropAction.MoveAction)
-        self._list.setDragDropMode(QListWidget.DragDropMode.InternalMove)
-
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self._list)
 
-        self._list.model().rowsMoved.connect(self._on_rows_moved)
+        self._items_layout = QVBoxLayout()
+        self._items_layout.setContentsMargins(0, 0, 0, 0)
+        self._items_layout.setSpacing(2)
+        layout.addLayout(self._items_layout)
 
-    def set_prompts(self, prompts: list[str]) -> None:
-        self._list.clear()
-        initial_prompts = prompts if prompts else [""]
-        for prompt in initial_prompts:
-            self._append_prompt_row(prompt)
-        self._sync_ui_state()
+        self._input = QLineEdit()
+        self._input.setPlaceholderText(placeholder)
+        self._input.returnPressed.connect(self._on_return_pressed)
+        layout.addWidget(self._input)
 
-    def get_prompts(self) -> list[str]:
-        prompts: list[str] = []
-        for index in range(self._list.count()):
-            item = self._list.item(index)
-            row = self._row_widget(item)
-            if row is not None:
-                prompts.append(row.text())
-        return prompts
+    def set_items(self, items: list[str]) -> None:
+        while self._items_layout.count():
+            item = self._items_layout.takeAt(0)
+            if item and (widget := item.widget()):
+                widget.deleteLater()
+        for text in items:
+            if text.strip():
+                self._add_row(text)
 
-    def add_prompt(self, text: str = "") -> None:
-        if not text.strip() and self._has_empty_prompt:
-            self._focus_first_empty_prompt()
+    def get_items(self) -> list[str]:
+        items: list[str] = []
+        for i in range(self._items_layout.count()):
+            if row := self._get_row(i):
+                items.append(row.text())
+        return items
+
+    def _get_row(self, index: int) -> ListEditorRow | None:
+        child = self._items_layout.itemAt(index)
+        if not child:
+            return None
+        row = child.widget()
+        if isinstance(row, ListEditorRow):
+            return row
+
+    def _on_return_pressed(self) -> None:
+        text = self._input.text().strip()
+        if not text:
             return
-        item = self._append_prompt_row(text)
-        self._sync_ui_state()
-        self._list.setCurrentItem(item)
-        row = self._row_widget(item)
-        if row is not None:
-            row.focus_editor()
+        self._add_row(text)
+        self._input.clear()
         self.changed.emit()
 
-    def move_prompt(self, from_index: int, to_index: int) -> None:
-        prompts = self.get_prompts()
-        count = len(prompts)
-        if (
-            from_index < 0
-            or to_index < 0
-            or from_index >= count
-            or to_index >= count
-            or from_index == to_index
-        ):
-            return
+    def _add_row(self, text: str) -> None:
+        row = ListEditorRow(text)
+        row.deleteClicked.connect(lambda: self._remove_row(row))
+        self._items_layout.addWidget(row)
 
-        prompt = prompts.pop(from_index)
-        prompts.insert(to_index, prompt)
-        self.set_prompts(prompts)
-        self._list.setCurrentRow(to_index)
-        self._sync_ui_state()
+    def _remove_row(self, row: ListEditorRow) -> None:
+        self._items_layout.removeWidget(row)
+        row.deleteLater()
         self.changed.emit()
-
-    def can_add_prompt(self) -> bool:
-        return not self._has_empty_prompt
-
-    def _append_prompt_row(self, check_in_prompt: str) -> QListWidgetItem:
-        item = QListWidgetItem()
-        row = CheckInPromptRowWidget(
-            check_in_prompt=check_in_prompt,
-            can_delete=self._list.count() > 0,
-            placeholder=self._placeholder,
-        )
-        row.deleteRequested.connect(self._remove_prompt_row)
-        row.textChanged.connect(self._on_row_text_changed)
-        row.blurRequested.connect(self._on_row_blur)
-        item.setSizeHint(row.sizeHint())
-        self._list.addItem(item)
-        self._list.setItemWidget(item, row)
-        return item
-
-    def _remove_prompt_row(self, row_widget: object) -> None:
-        if self._list.count() <= 1:
-            return
-
-        for index in range(self._list.count()):
-            item = self._list.item(index)
-            row = self._row_widget(item)
-            if row is row_widget:
-                self._list.takeItem(index)
-                break
-        self._sync_ui_state()
-        self.changed.emit()
-
-    def _on_rows_moved(self, *_: object) -> None:
-        self._sync_ui_state()
-        self.changed.emit()
-
-    def _on_row_text_changed(self) -> None:
-        self._sync_ui_state()
-        self.changed.emit()
-
-    def _on_row_blur(self, row_widget: object) -> None:
-        if self._list.count() <= 1:
-            return
-        for index in range(self._list.count()):
-            item = self._list.item(index)
-            row = self._row_widget(item)
-            if row is not None and row is row_widget and not row.text().strip():
-                self._list.takeItem(index)
-                self._sync_ui_state()
-                self.changed.emit()
-                break
-
-    def _focus_first_empty_prompt(self) -> None:
-        for index in range(self._list.count()):
-            item = self._list.item(index)
-            row = self._row_widget(item)
-            if row is not None and not row.text().strip():
-                self._list.setCurrentItem(item)
-                row.focus_editor()
-                return
-
-    def _sync_ui_state(self) -> None:
-        self._sync_can_delete()
-        has_empty_prompt = False
-        for index in range(self._list.count()):
-            item = self._list.item(index)
-            row = self._row_widget(item)
-            if row is not None and not row.text().strip():
-                has_empty_prompt = True
-                break
-        if has_empty_prompt != self._has_empty_prompt:
-            self._has_empty_prompt = has_empty_prompt
-            self.canAddChanged.emit(not has_empty_prompt)
-
-    def _sync_can_delete(self) -> None:
-        can_delete = self._list.count() > 1
-        for index in range(self._list.count()):
-            row = self._row_widget(self._list.item(index))
-            if row is not None:
-                row.set_can_delete(can_delete)
-
-    def _row_widget(self, item: QListWidgetItem) -> CheckInPromptRowWidget | None:
-        widget = self._list.itemWidget(item)
-        if isinstance(widget, CheckInPromptRowWidget):
-            return widget
-        return None
 
 
 class SessionSectionWidget(QGroupBox):
@@ -351,32 +212,23 @@ class TimersSectionWidget(QGroupBox):
         self.changed.emit()
 
 
-class PromptsSectionWidget(QGroupBox):
+class ListSectionWidget(QGroupBox):
     changed = QtCore.Signal()
 
     def __init__(
-        self, check_in_prompts: list[str], parent: QWidget | None = None
+        self,
+        title: str,
+        items: list[str],
+        placeholder: str = "Add item and press Enter...",
+        parent: QWidget | None = None,
     ) -> None:
-        super().__init__("Check-in Prompts", parent)
+        super().__init__(title, parent)
         layout = QVBoxLayout(self)
 
-        self.prompts_editor = PromptsEditor()
-        self.prompts_editor.set_prompts(check_in_prompts)
-        self.prompts_editor.changed.connect(self.changed.emit)
-
-        self.add_prompt_button = QPushButton("Add")
-        self.add_prompt_button.clicked.connect(
-            lambda: self.prompts_editor.add_prompt("")
-        )
-        self.add_prompt_button.setSizePolicy(
-            QSizePolicy.Policy.Expanding,
-            QSizePolicy.Policy.Fixed,
-        )
-        self.add_prompt_button.setEnabled(self.prompts_editor.can_add_prompt())
-        self.prompts_editor.canAddChanged.connect(self.add_prompt_button.setEnabled)
-
-        layout.addWidget(self.prompts_editor)
-        layout.addWidget(self.add_prompt_button)
+        self.list_editor = ListEditor(placeholder=placeholder)
+        self.list_editor.set_items(items)
+        self.list_editor.changed.connect(self.changed.emit)
+        layout.addWidget(self.list_editor)
 
 
 class NotificationsSectionWidget(QGroupBox):
@@ -397,72 +249,3 @@ class NotificationsSectionWidget(QGroupBox):
 
     def set_sound_enabled(self, enabled: bool) -> None:
         self._sound_checkbox.setChecked(enabled)
-
-
-class ProjectsSectionWidget(QGroupBox):
-    changed = QtCore.Signal()
-
-    def __init__(self, projects: list[str], parent: QWidget | None = None) -> None:
-        super().__init__("Projects", parent)
-        layout = QVBoxLayout(self)
-
-        self.prompts_editor = PromptsEditor(placeholder="Enter project name...")
-        self.prompts_editor.set_prompts(projects if projects else [""])
-        self.prompts_editor.changed.connect(self.changed.emit)
-
-        self.add_button = QPushButton("Add")
-        self.add_button.clicked.connect(lambda: self.prompts_editor.add_prompt(""))
-        self.add_button.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
-        )
-        self.add_button.setEnabled(self.prompts_editor.can_add_prompt())
-        self.prompts_editor.canAddChanged.connect(self.add_button.setEnabled)
-
-        layout.addWidget(self.prompts_editor)
-        layout.addWidget(self.add_button)
-
-
-class ExercisesSectionWidget(QGroupBox):
-    changed = QtCore.Signal()
-
-    def __init__(self, exercises: list[str], parent: QWidget | None = None) -> None:
-        super().__init__("Exercises", parent)
-        layout = QVBoxLayout(self)
-
-        self.prompts_editor = PromptsEditor(placeholder="Enter exercise name...")
-        self.prompts_editor.set_prompts(exercises if exercises else [""])
-        self.prompts_editor.changed.connect(self.changed.emit)
-
-        self.add_button = QPushButton("Add")
-        self.add_button.clicked.connect(lambda: self.prompts_editor.add_prompt(""))
-        self.add_button.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
-        )
-        self.add_button.setEnabled(self.prompts_editor.can_add_prompt())
-        self.prompts_editor.canAddChanged.connect(self.add_button.setEnabled)
-
-        layout.addWidget(self.prompts_editor)
-        layout.addWidget(self.add_button)
-
-
-class ActivitiesSectionWidget(QGroupBox):
-    changed = QtCore.Signal()
-
-    def __init__(self, activities: list[str], parent: QWidget | None = None) -> None:
-        super().__init__("Activities", parent)
-        layout = QVBoxLayout(self)
-
-        self.prompts_editor = PromptsEditor(placeholder="Enter activity name...")
-        self.prompts_editor.set_prompts(activities if activities else [""])
-        self.prompts_editor.changed.connect(self.changed.emit)
-
-        self.add_button = QPushButton("Add")
-        self.add_button.clicked.connect(lambda: self.prompts_editor.add_prompt(""))
-        self.add_button.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
-        )
-        self.add_button.setEnabled(self.prompts_editor.can_add_prompt())
-        self.prompts_editor.canAddChanged.connect(self.add_button.setEnabled)
-
-        layout.addWidget(self.prompts_editor)
-        layout.addWidget(self.add_button)

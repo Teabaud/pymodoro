@@ -5,9 +5,9 @@ from typing import Any
 
 import pytest
 from PySide6 import QtCore, QtGui
-from PySide6.QtWidgets import QSizePolicy
 
 from pymodoro.app_ui_widgets.settings_panel import AUTOSAVE_DEBOUNCE_MS, SettingsPanel
+from pymodoro.app_ui_widgets.settings_panel_widgets import ListEditor
 from pymodoro.settings import AppSettings, CheckInSettings, TimersSettings
 
 
@@ -33,7 +33,7 @@ def test_auto_save_debounces_and_persists(
     )
 
     panel._timers_group.work_duration.setValue(42)
-    panel._prompts_group.prompts_editor.set_prompts(["N1", "N2"])
+    panel._prompts_group.list_editor.set_items(["N1", "N2"])
 
     # Nothing saved yet (debounce pending)
     assert write_calls == []
@@ -71,155 +71,90 @@ def test_auto_save_skips_on_validation_failure(
     assert write_calls == []
 
 
-def test_add_prompt_schedules_auto_save(qcoreapp: Any, settings: AppSettings) -> None:
+# -- ListEditor tests --
+
+
+def test_list_editor_set_and_get_items(qcoreapp: Any) -> None:
+    editor = ListEditor()
+    editor.set_items(["A", "B", "C"])
+
+    assert editor.get_items() == ["A", "B", "C"]
+
+
+def test_list_editor_ignores_blank_items_on_set(qcoreapp: Any) -> None:
+    editor = ListEditor()
+    editor.set_items(["A", "", "  ", "B"])
+
+    assert editor.get_items() == ["A", "B"]
+
+
+def test_list_editor_add_via_return_pressed(qcoreapp: Any) -> None:
+    editor = ListEditor()
+    editor.set_items(["One"])
+    changed: list[bool] = []
+    editor.changed.connect(lambda: changed.append(True))
+
+    editor._input.setText("Two")
+    editor._input.returnPressed.emit()
+
+    assert editor.get_items() == ["One", "Two"]
+    assert editor._input.text() == ""
+    assert changed == [True]
+
+
+def test_list_editor_ignores_empty_return(qcoreapp: Any) -> None:
+    editor = ListEditor()
+    editor.set_items(["One"])
+    changed: list[bool] = []
+    editor.changed.connect(lambda: changed.append(True))
+
+    editor._input.setText("")
+    editor._input.returnPressed.emit()
+
+    assert editor.get_items() == ["One"]
+    assert changed == []
+
+
+def test_list_editor_delete_row(qcoreapp: Any) -> None:
+    editor = ListEditor()
+    editor.set_items(["A", "B", "C"])
+    changed: list[bool] = []
+    editor.changed.connect(lambda: changed.append(True))
+
+    # Delete the second row
+    row_widget = editor._items_layout.itemAt(1).widget()
+    editor._remove_row(row_widget)
+
+    assert editor.get_items() == ["A", "C"]
+    assert changed == [True]
+
+
+def test_list_editor_set_items_clears_previous(qcoreapp: Any) -> None:
+    editor = ListEditor()
+    editor.set_items(["A", "B"])
+    editor.set_items(["X"])
+
+    assert editor.get_items() == ["X"]
+
+
+def test_add_via_enter_schedules_auto_save(
+    qcoreapp: Any, settings: AppSettings
+) -> None:
     panel = SettingsPanel(settings)
 
-    panel._prompts_group.prompts_editor.add_prompt("Three")
+    panel._prompts_group.list_editor._input.setText("Three")
+    panel._prompts_group.list_editor._input.returnPressed.emit()
 
     assert panel._debounce_timer.isActive()
-    assert panel._prompts_group.prompts_editor.get_prompts() == [
-        "One",
-        "Two",
-        "Three",
-    ]
+    assert panel._prompts_group.list_editor.get_items() == ["One", "Two", "Three"]
 
 
-def test_prompts_editor_cannot_delete_last_prompt(
-    qcoreapp: Any, settings: AppSettings
-) -> None:
-    panel = SettingsPanel(settings)
-    panel._prompts_group.prompts_editor.set_prompts(["Only one"])
-    first_row = panel._prompts_group.prompts_editor._row_widget(
-        panel._prompts_group.prompts_editor._list.item(0)
-    )
-    assert first_row is not None
-
-    panel._prompts_group.prompts_editor._remove_prompt_row(first_row)
-
-    assert panel._prompts_group.prompts_editor.get_prompts() == ["Only one"]
+# -- Tests for other settings panel functionality (unchanged) --
 
 
-def test_prompts_editor_move_prompt_reorders_items(
-    qcoreapp: Any, settings: AppSettings
-) -> None:
-    panel = SettingsPanel(settings)
-    panel._prompts_group.prompts_editor.set_prompts(["A", "B", "C"])
-
-    panel._prompts_group.prompts_editor.move_prompt(2, 0)
-
-    assert panel._prompts_group.prompts_editor.get_prompts() == [
-        "C",
-        "A",
-        "B",
-    ]
-
-
-def test_only_one_empty_prompt_allowed_and_add_disabled(
-    qcoreapp: Any, settings: AppSettings
-) -> None:
+def test_compact_duration_inputs(qcoreapp: Any, settings: AppSettings) -> None:
     panel = SettingsPanel(settings)
 
-    assert panel._prompts_group.add_prompt_button.isEnabled() is True
-
-    panel._prompts_group.prompts_editor.add_prompt("")
-    prompts_after_first_add = panel._prompts_group.prompts_editor.get_prompts()
-
-    assert prompts_after_first_add.count("") == 1
-    assert panel._prompts_group.add_prompt_button.isEnabled() is False
-
-    panel._prompts_group.prompts_editor.add_prompt("")
-    prompts_after_second_add = panel._prompts_group.prompts_editor.get_prompts()
-
-    assert prompts_after_second_add == prompts_after_first_add
-    assert prompts_after_second_add.count("") == 1
-
-
-def test_add_reenabled_when_empty_prompt_gets_content(
-    qcoreapp: Any, settings: AppSettings
-) -> None:
-    panel = SettingsPanel(settings)
-    panel._prompts_group.prompts_editor.set_prompts(["One", ""])
-
-    assert panel._prompts_group.add_prompt_button.isEnabled() is False
-
-    empty_row = panel._prompts_group.prompts_editor._row_widget(
-        panel._prompts_group.prompts_editor._list.item(1)
-    )
-    assert empty_row is not None
-    empty_row._line_edit.setText("Now filled")
-
-    assert panel._prompts_group.add_prompt_button.isEnabled() is True
-
-
-def test_empty_prompt_auto_removed_on_blur_and_add_reenabled(
-    qcoreapp: Any, settings: AppSettings
-) -> None:
-    panel = SettingsPanel(settings)
-    panel._prompts_group.prompts_editor.set_prompts(["One", ""])
-
-    assert panel._prompts_group.add_prompt_button.isEnabled() is False
-
-    empty_row = panel._prompts_group.prompts_editor._row_widget(
-        panel._prompts_group.prompts_editor._list.item(1)
-    )
-    assert empty_row is not None
-    empty_row._line_edit.editingFinished.emit()
-
-    assert panel._prompts_group.prompts_editor.get_prompts() == ["One"]
-    assert panel._prompts_group.add_prompt_button.isEnabled() is True
-
-
-def test_empty_prompt_removed_on_focus_out_event(
-    qcoreapp: Any, settings: AppSettings
-) -> None:
-    panel = SettingsPanel(settings)
-    panel._prompts_group.prompts_editor.set_prompts(["One", ""])
-
-    empty_row = panel._prompts_group.prompts_editor._row_widget(
-        panel._prompts_group.prompts_editor._list.item(1)
-    )
-    assert empty_row is not None
-
-    focus_out = QtGui.QFocusEvent(QtCore.QEvent.Type.FocusOut)
-    qcoreapp.sendEvent(empty_row._line_edit, focus_out)
-    qcoreapp.processEvents()
-
-    assert panel._prompts_group.prompts_editor.get_prompts() == ["One"]
-    assert panel._prompts_group.add_prompt_button.isEnabled() is True
-
-
-def test_pressing_enter_does_not_trigger_auto_save(
-    qcoreapp: Any, monkeypatch: Any, settings: AppSettings
-) -> None:
-    panel = SettingsPanel(settings)
-    save_attempts: list[bool] = []
-    monkeypatch.setattr(panel, "_auto_save", lambda: save_attempts.append(True))
-
-    key_press = QtGui.QKeyEvent(
-        QtCore.QEvent.Type.KeyPress,
-        QtCore.Qt.Key.Key_Return,
-        QtCore.Qt.KeyboardModifier.NoModifier,
-    )
-    key_release = QtGui.QKeyEvent(
-        QtCore.QEvent.Type.KeyRelease,
-        QtCore.Qt.Key.Key_Return,
-        QtCore.Qt.KeyboardModifier.NoModifier,
-    )
-    qcoreapp.sendEvent(panel, key_press)
-    qcoreapp.sendEvent(panel, key_release)
-
-    assert save_attempts == []
-
-
-def test_add_button_full_width_and_compact_duration_inputs(
-    qcoreapp: Any, settings: AppSettings
-) -> None:
-    panel = SettingsPanel(settings)
-
-    assert (
-        panel._prompts_group.add_prompt_button.sizePolicy().horizontalPolicy()
-        == QSizePolicy.Policy.Expanding
-    )
     assert panel._timers_group.work_duration.maximumWidth() == 120
     assert panel._timers_group.break_duration.maximumWidth() == 120
     assert panel._timers_group.snooze_duration.maximumWidth() == 120
