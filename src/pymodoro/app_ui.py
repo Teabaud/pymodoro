@@ -58,6 +58,23 @@ class AppWindow(QtWidgets.QMainWindow):
         self.setWindowTitle("Pymodoro App")
         self.setWindowIcon(get_app_icon())
         self.setMinimumSize(800, 500)
+        self.setStyleSheet("""
+            QScrollBar:vertical {
+                width: 8px;
+                border: none;
+                border-radius: 4px;
+                background: palette(dark);
+            }
+            QScrollBar::handle:vertical {
+                border-radius: 4px;
+                min-height: 20px;
+                background: palette(midlight);
+            }
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+        """)
 
         self._build_ui()
 
