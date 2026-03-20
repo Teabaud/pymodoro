@@ -8,7 +8,6 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.12,<3.15"
 dependencies = [
-    "pyside6 (>=6.10.2,<7.0.0)",
     "pyyaml (>=6.0.2,<7.0.0)",
     "pydantic (>=2.12.5,<3.0.0)",
     "pytest (>=9.0.2,<10.0.0)",
@@ -16,6 +15,7 @@ dependencies = [
     "typer (>=0.21.1,<0.22.0)",
     "sounddevice (>=0.5.5,<0.6.0)",
     "soundfile (>=0.13.1,<0.14.0)",
+    "pyside6-essentials (>=6.10.2,<7.0.0)",
 ]
 
 [project.scripts]
