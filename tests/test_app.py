@@ -581,7 +581,8 @@ def test_phase_change_logs_session_record(
 
     monkeypatch.setattr(app_module, "MetricsLogger", MetricsLogger)
     now = datetime.now(timezone.utc)
-    start = now - timedelta(seconds=42)
+    duration = app_module.MIN_SESSION_DURATION_SEC + 1
+    start = now - timedelta(seconds=duration)
     app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
     app._on_phase_changed(
         PhaseTransition(

@@ -21,6 +21,9 @@ from PySide6 import QtCore
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
 
+MIN_SESSION_DURATION_SEC = 120  # 2 minutes
+
+
 def _get_qt_app() -> QApplication:
     app = QApplication([])
     app.setQuitOnLastWindowClosed(False)
@@ -103,6 +106,14 @@ class PomodoroApp(QtCore.QObject):
         if self._app_window:
             settings_panel = self._app_window.get_settings_panel()
             settings_panel.set_paused(transition.current_phase == SessionPhase.PAUSE)
+
+        start = transition.start_timestamp
+        end = transition.end_timestamp
+        duration = (end - start).total_seconds()
+        if duration < MIN_SESSION_DURATION_SEC:
+            phase = transition.previous_phase.value
+            logger.debug(f"Skipping short {phase!r} session ({duration:.0f}s)")
+            return
 
         record = SessionRecord(
             start_timestamp=transition.start_timestamp,
