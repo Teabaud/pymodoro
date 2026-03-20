@@ -38,10 +38,6 @@ class MainArea(QtWidgets.QFrame):
             }
         """)
 
-    @property
-    def settings_panel(self) -> SettingsPanel:
-        return cast(SettingsPanel, self._page_widgets[Page.SETTINGS])
-
     def show_page(self, page: Page) -> None:
         self._stack.setCurrentWidget(self._page_widgets[page])
 
@@ -101,7 +97,5 @@ class AppWindow(QtWidgets.QMainWindow):
             self.resize(980, 640)
 
     def closeEvent(self, event: QtGui.QCloseEvent) -> None:
-        if not self._main_area.settings_panel.prepare_leave():
-            return event.ignore()
         self._qt_settings.setValue("geometry", self.saveGeometry())
         super().closeEvent(event)

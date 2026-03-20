@@ -5,9 +5,9 @@ from typing import Any
 
 import pytest
 from PySide6 import QtCore, QtGui
-from PySide6.QtWidgets import QMessageBox, QSizePolicy
+from PySide6.QtWidgets import QSizePolicy
 
-from pymodoro.app_ui_widgets.settings_panel import SettingsPanel
+from pymodoro.app_ui_widgets.settings_panel import AUTOSAVE_DEBOUNCE_MS, SettingsPanel
 from pymodoro.settings import AppSettings, CheckInSettings, TimersSettings
 
 
@@ -20,13 +20,63 @@ def settings(tmp_path: Path) -> AppSettings:
     )
 
 
-def test_add_prompt_marks_dialog_dirty(qcoreapp: Any, settings: AppSettings) -> None:
+def test_auto_save_debounces_and_persists(
+    qcoreapp: Any, monkeypatch: Any, settings: AppSettings
+) -> None:
+    panel = SettingsPanel(settings)
+    saved: list[bool] = []
+    write_calls: list[AppSettings] = []
+    panel.settingsSaved.connect(lambda: saved.append(True))
+    monkeypatch.setattr(
+        "pymodoro.app_ui_widgets.settings_panel.save_settings",
+        lambda cfg: write_calls.append(cfg),
+    )
+
+    panel._timers_group.work_duration.setValue(42)
+    panel._prompts_group.prompts_editor.set_prompts(["N1", "N2"])
+
+    # Nothing saved yet (debounce pending)
+    assert write_calls == []
+
+    # Fire the debounce timer
+    panel._debounce_timer.timeout.emit()
+
+    assert settings.timers.work_duration == 42
+    assert settings.check_in.prompts == ["N1", "N2"]
+    assert write_calls == [settings]
+    assert saved == [True]
+
+
+def test_auto_save_skips_on_validation_failure(
+    qcoreapp: Any, monkeypatch: Any, settings: AppSettings
+) -> None:
+    panel = SettingsPanel(settings)
+    write_calls: list[AppSettings] = []
+    monkeypatch.setattr(
+        "pymodoro.app_ui_widgets.settings_panel.save_settings",
+        lambda cfg: write_calls.append(cfg),
+    )
+
+    # Force a validation error by making to_timers_settings raise
+    from pydantic import ValidationError
+
+    monkeypatch.setattr(
+        panel._timers_group,
+        "to_timers_settings",
+        lambda: (_ for _ in ()).throw(ValidationError.from_exception_data("test", [])),
+    )
+
+    panel._auto_save()
+
+    assert write_calls == []
+
+
+def test_add_prompt_schedules_auto_save(qcoreapp: Any, settings: AppSettings) -> None:
     panel = SettingsPanel(settings)
 
-    assert panel._dirty is False
     panel._prompts_group.prompts_editor.add_prompt("Three")
 
-    assert panel._dirty is True
+    assert panel._debounce_timer.isActive()
     assert panel._prompts_group.prompts_editor.get_prompts() == [
         "One",
         "Two",
@@ -138,40 +188,12 @@ def test_empty_prompt_removed_on_focus_out_event(
     assert panel._prompts_group.add_prompt_button.isEnabled() is True
 
 
-def test_save_updates_settings_and_emits_signal(
-    qcoreapp: Any, monkeypatch: Any, settings: AppSettings
-) -> None:
-    panel = SettingsPanel(settings)
-    saved: list[bool] = []
-    write_calls: list[AppSettings] = []
-    panel.settingsSaved.connect(lambda: saved.append(True))
-    monkeypatch.setattr(
-        "pymodoro.app_ui_widgets.settings_panel.save_settings",
-        lambda cfg: write_calls.append(cfg),
-    )
-
-    panel._timers_group.work_duration.setValue(42)
-    panel._prompts_group.prompts_editor.set_prompts(["N1", "N2"])
-    panel._mark_dirty()
-
-    result = panel._save_settings()
-
-    assert result is True
-    assert settings.timers.work_duration == 42
-    assert settings.check_in.prompts == ["N1", "N2"]
-    assert write_calls == [settings]
-    assert saved == [True]
-    assert panel._dirty is False
-
-
-def test_pressing_enter_does_not_trigger_save(
+def test_pressing_enter_does_not_trigger_auto_save(
     qcoreapp: Any, monkeypatch: Any, settings: AppSettings
 ) -> None:
     panel = SettingsPanel(settings)
     save_attempts: list[bool] = []
-    monkeypatch.setattr(
-        panel, "_save_settings", lambda: save_attempts.append(True) or True
-    )
+    monkeypatch.setattr(panel, "_auto_save", lambda: save_attempts.append(True))
 
     key_press = QtGui.QKeyEvent(
         QtCore.QEvent.Type.KeyPress,
@@ -201,54 +223,6 @@ def test_add_button_full_width_and_compact_duration_inputs(
     assert panel._timers_group.work_duration.maximumWidth() == 120
     assert panel._timers_group.break_duration.maximumWidth() == 120
     assert panel._timers_group.snooze_duration.maximumWidth() == 120
-
-
-def test_close_event_cancel_keeps_window_open(
-    qcoreapp: Any, monkeypatch: Any, settings: AppSettings
-) -> None:
-    panel = SettingsPanel(settings)
-    panel._dirty = True
-    monkeypatch.setattr(
-        panel,
-        "_confirm_close_for_dirty_state",
-        lambda: QMessageBox.StandardButton.Cancel,
-    )
-
-    can_leave = panel.prepare_leave()
-
-    assert can_leave is False
-    assert panel._dirty is True
-
-
-def test_close_event_save_path_uses_save_settings(
-    qcoreapp: Any, monkeypatch: Any, settings: AppSettings
-) -> None:
-    panel = SettingsPanel(settings)
-    panel._dirty = True
-    save_attempts: list[bool] = []
-
-    # Ensure the dialog path returns "Save"
-    monkeypatch.setattr(
-        panel,
-        "_confirm_close_for_dirty_state",
-        lambda: QMessageBox.StandardButton.Save,
-    )
-
-    # Wrap the real _save_settings so we can observe the call while still letting it
-    # perform the actual save logic (including clearing _dirty).
-    real_save_settings = panel._save_settings
-
-    def wrapped_save_settings() -> bool:
-        save_attempts.append(True)
-        return real_save_settings()
-
-    monkeypatch.setattr(panel, "_save_settings", wrapped_save_settings)
-
-    can_leave = panel.prepare_leave()
-
-    assert save_attempts == [True]
-    assert can_leave is True
-    assert panel._dirty is False
 
 
 def test_pause_resume_button_text_follows_paused_state(
