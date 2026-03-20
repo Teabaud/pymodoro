@@ -20,6 +20,7 @@ check_in:
     - "What do you want to focus on next?"
     - "What is your goal for the day?"
   projects: []
+  exercises: []
   activities:
     - creating
     - planning
@@ -42,6 +43,7 @@ class TimersSettings(BaseModel):
 class CheckInSettings(BaseModel):
     prompts: list[str]
     projects: list[str] = []
+    exercises: list[str] = []
     activities: list[str] = []
 
 

@@ -6,7 +6,6 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QPlainTextEdit,
     QPushButton,
     QSizePolicy,
@@ -309,7 +308,11 @@ class FocusRatingWidget(_ExclusiveToggleRow):
 
 
 class ExerciseWidget(QWidget):
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        exercises: list[str],
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
 
         self._rep_count_input = QSpinBox(self)
@@ -317,14 +320,22 @@ class ExerciseWidget(QWidget):
         self._rep_count_input.setValue(0)
         self._rep_count_input.setToolTip("How many reps you did")
 
-        self._exercise_name_input = QLineEdit(self)
-        self._exercise_name_input.setPlaceholderText("name of the exercise")
+        self._combo = QComboBox(self)
+        self._combo.setEditable(True)
+        self._combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self._combo.addItems(exercises)
+        self._combo.setCurrentIndex(-1)
+        self._combo.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
+        if (line_edit := self._combo.lineEdit()) is not None:
+            line_edit.setPlaceholderText("Select an exercise...")
 
         layout = QHBoxLayout(self)
         layout.addWidget(self._rep_count_input, 1)
         layout.addSpacing(8)
-        layout.addWidget(self._exercise_name_input, 3)
-        layout.addStretch(1)
+        layout.addWidget(self._combo, 3)
 
     @property
     def rep_count(self) -> int:
@@ -332,7 +343,7 @@ class ExerciseWidget(QWidget):
 
     @property
     def exercise_name(self) -> str:
-        return self._exercise_name_input.text().strip()
+        return self._combo.currentText().strip()
 
     @property
     def exercise_result(self) -> ExerciseResult:
@@ -341,7 +352,7 @@ class ExerciseWidget(QWidget):
 
     def clear(self) -> None:
         self._rep_count_input.setValue(0)
-        self._exercise_name_input.clear()
+        self._combo.setCurrentIndex(-1)
 
 
 class ProjectWidget(QWidget):

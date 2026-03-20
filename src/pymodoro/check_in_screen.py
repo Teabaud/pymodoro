@@ -74,7 +74,8 @@ class CheckInScreen(QtWidgets.QDialog):
         self._activity_widget = ActivityWidget(activities, self)
         self._leverage_widget = LeverageWidget(self)
         self._focus_rating_widget = FocusRatingWidget(self)
-        self._exercise_widget = ExerciseWidget(self)
+        exercises = settings.check_in.exercises if settings is not None else []
+        self._exercise_widget = ExerciseWidget(exercises, self)
         self._submit_button = QtWidgets.QPushButton("Submit", self)
         self._submit_button.clicked.connect(self._on_submit)
         self._install_submit_shortcuts()

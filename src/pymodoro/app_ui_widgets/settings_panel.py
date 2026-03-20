@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from pymodoro.app_ui_widgets.settings_panel_widgets import (
     ActivitiesSectionWidget,
     DurationSelectionDialog,
+    ExercisesSectionWidget,
     NotificationsSectionWidget,
     ProjectsSectionWidget,
     PromptsSectionWidget,
@@ -67,6 +68,10 @@ class SettingsPanel(QWidget):
             projects=settings.check_in.projects,
             parent=self,
         )
+        self._exercises_group = ExercisesSectionWidget(
+            exercises=settings.check_in.exercises,
+            parent=self,
+        )
         self._activities_group = ActivitiesSectionWidget(
             activities=settings.check_in.activities,
             parent=self,
@@ -82,6 +87,7 @@ class SettingsPanel(QWidget):
         self._timers_group.changed.connect(self._schedule_auto_save)
         self._prompts_group.changed.connect(self._schedule_auto_save)
         self._projects_group.changed.connect(self._schedule_auto_save)
+        self._exercises_group.changed.connect(self._schedule_auto_save)
         self._activities_group.changed.connect(self._schedule_auto_save)
         self._notifications_group.changed.connect(self._schedule_auto_save)
 
@@ -92,6 +98,7 @@ class SettingsPanel(QWidget):
         layout.addWidget(self._notifications_group)
         layout.addWidget(self._prompts_group)
         layout.addWidget(self._projects_group)
+        layout.addWidget(self._exercises_group)
         layout.addWidget(self._activities_group)
 
         scroll = QScrollArea(self)
@@ -158,6 +165,7 @@ class SettingsPanel(QWidget):
             timers = self._timers_group.to_timers_settings()
             check_in_prompts = self._prompts_group.prompts_editor.get_prompts()
             check_in_projects = self._projects_group.prompts_editor.get_prompts()
+            check_in_exercises = self._exercises_group.prompts_editor.get_prompts()
             check_in_activities = self._activities_group.prompts_editor.get_prompts()
             sound_enabled = self._notifications_group.is_sound_enabled()
         except ValidationError:
@@ -166,6 +174,7 @@ class SettingsPanel(QWidget):
         self._settings.timers = timers
         self._settings.check_in.prompts = check_in_prompts
         self._settings.check_in.projects = check_in_projects
+        self._settings.check_in.exercises = check_in_exercises
         self._settings.check_in.activities = check_in_activities
         self._settings.notification_sound_enabled = sound_enabled
         save_settings(self._settings)

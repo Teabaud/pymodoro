@@ -422,6 +422,29 @@ class ProjectsSectionWidget(QGroupBox):
         layout.addWidget(self.add_button)
 
 
+class ExercisesSectionWidget(QGroupBox):
+    changed = QtCore.Signal()
+
+    def __init__(self, exercises: list[str], parent: QWidget | None = None) -> None:
+        super().__init__("Exercises", parent)
+        layout = QVBoxLayout(self)
+
+        self.prompts_editor = PromptsEditor(placeholder="Enter exercise name...")
+        self.prompts_editor.set_prompts(exercises if exercises else [""])
+        self.prompts_editor.changed.connect(self.changed.emit)
+
+        self.add_button = QPushButton("Add")
+        self.add_button.clicked.connect(lambda: self.prompts_editor.add_prompt(""))
+        self.add_button.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        self.add_button.setEnabled(self.prompts_editor.can_add_prompt())
+        self.prompts_editor.canAddChanged.connect(self.add_button.setEnabled)
+
+        layout.addWidget(self.prompts_editor)
+        layout.addWidget(self.add_button)
+
+
 class ActivitiesSectionWidget(QGroupBox):
     changed = QtCore.Signal()
 
