@@ -22,11 +22,11 @@ check_in:
   projects: []
   exercises: []
   activities:
-    - creating
-    - planning
-    - communicating
-    - learning
-    - admin
+    - Creating
+    - Planning
+    - Messaging
+    - Learning
+    - Admin
 """
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
