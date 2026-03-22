@@ -4,6 +4,31 @@ from pymodoro.app_ui_widgets.pages import Page
 from pymodoro.tray import get_app_icon
 
 
+STYLESHEET = """
+QListWidget {
+    border: none;
+    outline: 0;
+    font-size: 13px;
+    background: transparent;
+}
+QListWidget::item {
+    padding: 10px 16px;
+    border-radius: 6px;
+}
+QListWidget::item:hover {
+    background-color: palette(midlight);
+}
+QListWidget::item:selected {
+    background-color: palette(highlight);
+    color: palette(highlighted-text);
+}
+Logo {
+    background: transparent;
+    border: none;
+}
+"""
+
+
 class Logo(QtWidgets.QToolButton):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -11,7 +36,6 @@ class Logo(QtWidgets.QToolButton):
         self.setIcon(icon)
         self.setIconSize(QtCore.QSize(70, 70))
         self.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
-        self.setStyleSheet("Logo { background: transparent; border: none; }")
 
 
 class NavItem(QtWidgets.QListWidget):
@@ -19,25 +43,6 @@ class NavItem(QtWidgets.QListWidget):
         super().__init__(parent)
         for page in Page:
             self.addItem(page)
-
-        self.setStyleSheet("""
-            QListWidget {
-                border: none;
-                outline: 0;
-                font-size: 13px;
-            }
-            QListWidget::item {
-                padding: 10px 16px;
-                border-radius: 6px;
-            }
-            QListWidget::item:hover {
-                background-color: palette(midlight);
-            }
-            QListWidget::item:selected {
-                background-color: palette(highlight);
-                color: palette(highlighted-text);
-            }
-        """)
 
 
 class Separator(QtWidgets.QFrame):
@@ -67,6 +72,8 @@ class Sidebar(QtWidgets.QFrame):
         layout.addWidget(self._logo, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(Separator(self))
         layout.addWidget(self._nav_item)
+
+        self.setStyleSheet(STYLESHEET)
 
     def _on_nav_item_clicked(self, item: QtWidgets.QListWidgetItem) -> None:
         self.navigate.emit(Page(item.text()))

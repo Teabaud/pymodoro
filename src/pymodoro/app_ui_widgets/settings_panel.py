@@ -115,16 +115,6 @@ class SettingsPanel(QWidget):
         root = QVBoxLayout(self)
         root.addWidget(scroll)
 
-        self.setStyleSheet("""
-            SettingsPanel {
-                background-color: palette(base);
-                border-radius: 10px;
-                margin: 12px 0px 0px 0px;
-            }
-        """)
-
-        self.setMaximumWidth(600)
-
     def set_paused(self, paused: bool) -> None:
         self._is_paused = paused
         self._session_group.set_paused(paused)

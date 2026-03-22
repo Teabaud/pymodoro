@@ -27,16 +27,9 @@ class MainArea(QtWidgets.QFrame):
         [self._stack.addWidget(widget) for widget in self._page_widgets.values()]
 
         layout = QtWidgets.QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        self._stack.setBackgroundRole(QtGui.QPalette.ColorRole.Window)
+        self._stack.setAutoFillBackground(True)
         layout.addWidget(self._stack)
-
-        self.setStyleSheet("""
-            MainArea {
-                background-color: palette(alternate-base);
-                border-radius: 10px;
-                margin: 12px 0px 0px 0px;
-            }
-        """)
 
     def show_page(self, page: Page) -> None:
         self._stack.setCurrentWidget(self._page_widgets[page])
@@ -52,6 +45,9 @@ class AppWindow(QtWidgets.QMainWindow):
 
         self._settings = settings
 
+        self.setBackgroundRole(QtGui.QPalette.ColorRole.AlternateBase)
+        self.setAutoFillBackground(True)
+
         self._qt_settings = QtCore.QSettings("Pymodoro", "App")
         self.restore_geometry()
 
@@ -65,8 +61,7 @@ class AppWindow(QtWidgets.QMainWindow):
     def _build_ui(self) -> None:
         container = QtWidgets.QWidget()
         root = QtWidgets.QHBoxLayout(container)
-        root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(0)
+        root.setContentsMargins(0, 12, 0, 0)
 
         self._sidebar = Sidebar(container)
         self._sidebar.navigate.connect(self.navigate_to_page)

@@ -753,6 +753,28 @@ class _SessionTooltip(QtWidgets.QFrame):
 # Navigation bar
 # ---------------------------------------------------------------------------
 
+_NAV_BAR_STYLE = """
+QPushButton {
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    padding: 4px 8px;
+}
+QPushButton:hover {
+    background-color: palette(mid);
+}
+QLabel#calendar_nav_range {
+    font-size: 14px;
+    font-weight: bold;
+}
+QLabel#calendar_nav_week {
+    font-size: 14px;
+    background-color: palette(mid);
+    border-radius: 6px;
+    padding: 4px 6px;
+}
+"""
+
 
 class _NavBar(QtWidgets.QWidget):
     weekChanged = QtCore.Signal(date)  # emits the new week_start
@@ -765,17 +787,13 @@ class _NavBar(QtWidgets.QWidget):
         self._next_btn = QtWidgets.QPushButton("▶")
         self._today_btn = QtWidgets.QPushButton("Today")
         self._range_label = QtWidgets.QLabel()
+        self._range_label.setObjectName("calendar_nav_range")
         self._week_label = QtWidgets.QLabel()
+        self._week_label.setObjectName("calendar_nav_week")
 
         for btn in (self._prev_btn, self._next_btn, self._today_btn):
             btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
             btn.setFlat(True)
-
-        self._range_label.setStyleSheet("font-size: 14px; font-weight: bold;")
-        self._week_label.setStyleSheet(
-            "font-size: 14px; background-color: palette(mid);"
-            "border-radius: 6px; padding: 4px 6px;"
-        )
 
         layout = QtWidgets.QHBoxLayout(self)
         layout.setContentsMargins(8, 4, 8, 4)
@@ -785,6 +803,8 @@ class _NavBar(QtWidgets.QWidget):
         layout.addWidget(self._week_label)
         layout.addStretch()
         layout.addWidget(self._today_btn)
+
+        self.setStyleSheet(_NAV_BAR_STYLE)
 
         self._prev_btn.clicked.connect(lambda: self._navigate(-1))
         self._next_btn.clicked.connect(lambda: self._navigate(1))
