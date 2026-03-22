@@ -167,13 +167,16 @@ class DurationSelectionDialog(QDialog):
 
 
 class DurationInputWidget(QSpinBox):
-    def __init__(self, value: int, parent: QWidget | None = None) -> None:
+    def __init__(self, value_seconds: int, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setRange(1, 9999)
-        self.setSuffix(" s")
-        self.setValue(value)
+        self.setRange(1, 999)
+        self.setSuffix(" min")
+        self.setValue(max(1, round(value_seconds / 60)))
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.setMaximumWidth(DURATION_INPUT_MAX_WIDTH)
+
+    def value_seconds(self) -> int:
+        return self.value() * 60
 
 
 class TimersSectionWidget(QGroupBox):
@@ -203,9 +206,9 @@ class TimersSectionWidget(QGroupBox):
 
     def to_timers_settings(self) -> TimersSettings:
         return TimersSettings(
-            work_duration=self.work_duration.value(),
-            break_duration=self.break_duration.value(),
-            snooze_duration=self.snooze_duration.value(),
+            work_duration=self.work_duration.value_seconds(),
+            break_duration=self.break_duration.value_seconds(),
+            snooze_duration=self.snooze_duration.value_seconds(),
         )
 
     def on_duration_changed(self, _: int) -> None:
