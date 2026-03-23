@@ -7,7 +7,7 @@ import pytest
 from PySide6 import QtCore, QtGui
 
 from pymodoro.app_ui_widgets.settings_panel import AUTOSAVE_DEBOUNCE_MS, SettingsPanel
-from pymodoro.app_ui_widgets.settings_panel_widgets import ListEditor
+from pymodoro.app_ui_widgets.settings_panel_widgets import ListEditor, ListEditorRow
 from pymodoro.settings import AppSettings, CheckInSettings, TimersSettings
 
 
@@ -32,7 +32,7 @@ def test_auto_save_debounces_and_persists(
         lambda cfg: write_calls.append(cfg),
     )
 
-    panel._timers_group.work_duration.setValue(42)
+    panel._timers_group.work_duration.setValue(42 * 60)
     panel._prompts_group.list_editor.set_items(["N1", "N2"])
 
     # Nothing saved yet (debounce pending)
@@ -41,7 +41,7 @@ def test_auto_save_debounces_and_persists(
     # Fire the debounce timer
     panel._debounce_timer.timeout.emit()
 
-    assert settings.timers.work_duration == 42
+    assert settings.timers.work_duration == 42 * 60
     assert settings.check_in.prompts == ["N1", "N2"]
     assert write_calls == [settings]
     assert saved == [True]
@@ -122,7 +122,10 @@ def test_list_editor_delete_row(qcoreapp: Any) -> None:
     editor.changed.connect(lambda: changed.append(True))
 
     # Delete the second row
-    row_widget = editor._items_layout.itemAt(1).widget()
+    row = editor._items_layout.itemAt(1)
+    assert row is not None
+    row_widget = row.widget()
+    assert isinstance(row_widget, ListEditorRow)
     editor._remove_row(row_widget)
 
     assert editor.get_items() == ["A", "C"]

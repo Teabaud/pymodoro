@@ -34,7 +34,9 @@ class ListEditorRow(QWidget):
         row_layout.setSpacing(6)
 
         self._label = QLabel(text)
-        self._label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self._label.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         row_layout.addWidget(self._label, 1)
 
         delete_btn = QPushButton(DELETE_CHAR)
@@ -135,6 +137,29 @@ class SessionSectionWidget(QGroupBox):
         self.pause_resume_button.setText("Resume" if paused else "Pause until...")
 
 
+class DurationInputWidget(QWidget):
+    valueChanged = QtCore.Signal(int)
+
+    def __init__(self, value_seconds: int, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._spin = QSpinBox()
+        self._spin.setRange(1, 999)
+        self._spin.setSuffix(" min")
+        self._spin.setValue(max(1, round(value_seconds / 60)))
+        self._spin.valueChanged.connect(lambda m: self.valueChanged.emit(m * 60))
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self._spin)
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.setMaximumWidth(DURATION_INPUT_MAX_WIDTH)
+
+    def value(self) -> int:
+        return self._spin.value() * 60
+
+    def setValue(self, seconds: int) -> None:
+        self._spin.setValue(max(1, round(seconds / 60)))
+
+
 class DurationSelectionDialog(QDialog):
     def __init__(
         self,
@@ -148,11 +173,8 @@ class DurationSelectionDialog(QDialog):
 
         layout = QVBoxLayout(self)
         form = QFormLayout()
-        self._minutes_input = QSpinBox(self)
-        self._minutes_input.setMinimum(1)
-        self._minutes_input.setSuffix(" min")
-        self._minutes_input.setValue(max(1, round(default_seconds / 60)))
-        form.addRow("Duration:", self._minutes_input)
+        self._duration = DurationInputWidget(default_seconds, self)
+        form.addRow("Duration:", self._duration)
         layout.addLayout(form)
 
         button_box = QDialogButtonBox(
@@ -163,20 +185,7 @@ class DurationSelectionDialog(QDialog):
         layout.addWidget(button_box)
 
     def value(self) -> int:
-        return self._minutes_input.value() * 60
-
-
-class DurationInputWidget(QSpinBox):
-    def __init__(self, value_seconds: int, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setRange(1, 999)
-        self.setSuffix(" min")
-        self.setValue(max(1, round(value_seconds / 60)))
-        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.setMaximumWidth(DURATION_INPUT_MAX_WIDTH)
-
-    def value_seconds(self) -> int:
-        return self.value() * 60
+        return self._duration.value()
 
 
 class TimersSectionWidget(QGroupBox):
@@ -206,9 +215,9 @@ class TimersSectionWidget(QGroupBox):
 
     def to_timers_settings(self) -> TimersSettings:
         return TimersSettings(
-            work_duration=self.work_duration.value_seconds(),
-            break_duration=self.break_duration.value_seconds(),
-            snooze_duration=self.snooze_duration.value_seconds(),
+            work_duration=self.work_duration.value(),
+            break_duration=self.break_duration.value(),
+            snooze_duration=self.snooze_duration.value(),
         )
 
     def on_duration_changed(self, _: int) -> None:
