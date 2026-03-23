@@ -151,13 +151,11 @@ class PromptCard(QWidget):
         self._input = QPlainTextEdit(self)
         self._input.setPlaceholderText("Click on the question to select another one")
         self._input.setTabChangesFocus(True)
-        self._input.setVisible(True)
 
         layout = QVBoxLayout(self)
         layout.addWidget(self._check_in_prompt)
         layout.addSpacing(24)
         layout.addWidget(self._input)
-        self.setLayout(layout)
 
     def _on_prompt_clicked(self) -> None:
         if not self._prompts:
@@ -167,9 +165,6 @@ class PromptCard(QWidget):
         )
         overlay.prompt_selected.connect(self._check_in_prompt.setText)
 
-    def set_check_in_prompt(self, text: str) -> None:
-        self._check_in_prompt.setText(text)
-
     @property
     def prompt(self) -> str:
         return self._check_in_prompt.text()
@@ -177,9 +172,6 @@ class PromptCard(QWidget):
     @property
     def answer(self) -> str:
         return self._input.toPlainText().strip()
-
-    def clear(self) -> None:
-        self._input.setPlainText("")
 
     def focus_input(self) -> None:
         self._input.setFocus()
@@ -201,24 +193,27 @@ class _ExclusiveToggleRow(QWidget):
         super().__init__(parent)
         self._selected: str | None = None
         self._buttons: list[QPushButton] = []
+        tooltips = tooltips or {}
 
         layout = QHBoxLayout(self)
         layout.setSpacing(8)
-
         for option in options:
-            btn = QPushButton(option.capitalize(), self)
-            btn.setCheckable(True)
-            btn.setAutoDefault(False)
-            btn.setDefault(False)
-            if tooltips and option in tooltips:
-                btn.setToolTip(tooltips[option])
-            btn.clicked.connect(self._make_handler(option, btn))
-            btn.installEventFilter(self)
-            self._buttons.append(btn)
+            btn = self._create_button(option, tooltips)
             layout.addWidget(btn)
-
         layout.addStretch(1)
         self._update_tab_focus()
+
+    def _create_button(self, option: str, tooltips: dict[str, str]) -> QPushButton:
+        btn = QPushButton(option.capitalize(), self)
+        btn.setCheckable(True)
+        btn.setAutoDefault(False)
+        btn.setDefault(False)
+        if option in tooltips:
+            btn.setToolTip(tooltips[option])
+        btn.clicked.connect(self._make_handler(option, btn))
+        btn.installEventFilter(self)
+        self._buttons.append(btn)
+        return btn
 
     def _update_tab_focus(self) -> None:
         """Make only the checked (or first) button tabbable."""
@@ -283,12 +278,6 @@ class _ExclusiveToggleRow(QWidget):
     def selected(self) -> str | None:
         return self._selected
 
-    def clear(self) -> None:
-        self._selected = None
-        for btn in self._buttons:
-            btn.setChecked(False)
-        self._update_tab_focus()
-
 
 class FocusRatingWidget(_ExclusiveToggleRow):
     """Focus rating selector with 1-5 buttons."""
@@ -350,10 +339,6 @@ class ExerciseWidget(QWidget):
         if self.exercise_name != "" and self.rep_count > 0:
             return self.exercise_name, self.rep_count
 
-    def clear(self) -> None:
-        self._rep_count_input.setValue(0)
-        self._combo.setCurrentIndex(-1)
-
 
 class ProjectWidget(QWidget):
     """Project selector with an editable combo box."""
@@ -385,9 +370,6 @@ class ProjectWidget(QWidget):
     def project(self) -> str | None:
         text = self._combo.currentText().strip()
         return text or None
-
-    def clear(self) -> None:
-        self._combo.setCurrentIndex(-1)
 
 
 class ActivityWidget(_ExclusiveToggleRow):

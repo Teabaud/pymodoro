@@ -118,8 +118,8 @@ class DummyPrompt:
         self.accepted = True
         self.finished.emit(1)
 
-    def set_check_in_prompt(self, check_in_prompt: str) -> None:
-        self.check_in_prompt = check_in_prompt
+    def deleteLater(self) -> None:
+        self.deleted = True
 
 
 class DummyApp:
@@ -278,7 +278,7 @@ def test_pomodoro_app_wires_controllers(
     assert dummy_app.exec_called is True
 
 
-def test_show_check_in_window_reuses_prompt(
+def test_show_check_in_window_recreates_screen(
     monkeypatch: Any, settings: AppSettings
 ) -> None:
     monkeypatch.setattr(app_module, "SessionPhaseManager", DummySessionPhaseManager)
@@ -288,10 +288,14 @@ def test_show_check_in_window_reuses_prompt(
     app = app_module.PomodoroApp(settings, app=cast(Any, DummyApp()))
 
     app._show_check_in_window()
-    prompt = app._check_in_screen
-    assert prompt is not None
-    dummy_prompt = cast(DummyPrompt, prompt)
-    assert dummy_prompt.show_called == 1
+    first_screen = app._check_in_screen
+    assert first_screen is not None
+    cast(DummyPrompt, first_screen).visible = False  # simulate close
+
+    app._show_check_in_window()
+    second_screen = app._check_in_screen
+    assert second_screen is not first_screen
+    assert getattr(first_screen, "deleted", False) is True
 
 
 def test_check_in_from_tray_opens_check_in_window(
@@ -311,6 +315,7 @@ def test_check_in_from_tray_opens_check_in_window(
     dummy_prompt = cast(DummyPrompt, prompt)
     assert dummy_prompt.show_called == 1
 
+    # Second request while visible is a no-op
     app._show_check_in_window()
     assert app._check_in_screen is prompt
     assert dummy_prompt.show_called == 1

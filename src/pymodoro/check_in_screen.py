@@ -52,11 +52,10 @@ class CheckInScreen(QtWidgets.QDialog):
     def __init__(
         self,
         check_in_prompt: str,
-        settings: AppSettings | None = None,
+        settings: AppSettings,
         parent: QtWidgets.QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self._settings = settings
         self.setWindowFlags(
             QtCore.Qt.WindowType.Window
             | QtCore.Qt.WindowType.FramelessWindowHint
@@ -66,24 +65,20 @@ class CheckInScreen(QtWidgets.QDialog):
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_ShowWithoutActivating, False)
         self.setWindowIcon(get_app_icon())
 
-        prompts = settings.check_in.prompts if settings is not None else []
-        projects = settings.check_in.projects if settings is not None else []
-        activities = settings.check_in.activities if settings is not None else []
-        self._prompt_card = PromptCard(check_in_prompt, prompts=prompts, parent=self)
-        self._project_widget = ProjectWidget(projects, self)
-        self._activity_widget = ActivityWidget(activities, self)
+        self._prompt_card = PromptCard(
+            check_in_prompt, prompts=settings.check_in.prompts, parent=self
+        )
+        self._project_widget = ProjectWidget(settings.check_in.projects, self)
+        self._activity_widget = ActivityWidget(settings.check_in.activities, self)
         self._leverage_widget = LeverageWidget(self)
         self._focus_rating_widget = FocusRatingWidget(self)
-        exercises = settings.check_in.exercises if settings is not None else []
-        self._exercise_widget = ExerciseWidget(exercises, self)
+        self._exercise_widget = ExerciseWidget(settings.check_in.exercises, self)
         self._submit_button = QtWidgets.QPushButton("Submit", self)
         self._submit_button.clicked.connect(self._on_submit)
         self._install_submit_shortcuts()
 
         self.setLayout(self._build_layout())
         self.setStyleSheet(STYLESHEET)
-
-        self.set_check_in_prompt = self._prompt_card.set_check_in_prompt
 
     def _install_submit_shortcuts(self) -> None:
         for shortcut in SUBMIT_SHORTCUTS:
@@ -95,16 +90,16 @@ class CheckInScreen(QtWidgets.QDialog):
         layout.addWidget(self._prompt_card)
         layout.addSpacing(16)
 
-        self._metrics_grid = MetricsGrid(self)
-        self._metrics_grid.add_row("Project", self._project_widget)
-        self._metrics_grid.add_row("Activity", self._activity_widget)
-        self._metrics_grid.add_row("Leverage", self._leverage_widget)
-        self._metrics_grid.add_row("Focus", self._focus_rating_widget)
-        self._metrics_grid.add_row("Exercise", self._exercise_widget)
+        metrics_grid = MetricsGrid(self)
+        metrics_grid.add_row("Project", self._project_widget)
+        metrics_grid.add_row("Activity", self._activity_widget)
+        metrics_grid.add_row("Leverage", self._leverage_widget)
+        metrics_grid.add_row("Focus", self._focus_rating_widget)
+        metrics_grid.add_row("Exercise", self._exercise_widget)
 
         centered_layout = QtWidgets.QHBoxLayout()
         centered_layout.addStretch(1)
-        centered_layout.addWidget(self._metrics_grid, 2)
+        centered_layout.addWidget(metrics_grid, 2)
         centered_layout.addStretch(1)
 
         layout.addLayout(centered_layout, 1)
@@ -119,12 +114,6 @@ class CheckInScreen(QtWidgets.QDialog):
 
     def showEvent(self, event: QtGui.QShowEvent) -> None:
         super().showEvent(event)
-        self._focus_rating_widget.clear()
-        self._exercise_widget.clear()
-        self._project_widget.clear()
-        self._activity_widget.clear()
-        self._leverage_widget.clear()
-        self._prompt_card.clear()
         self.showFullScreen()
         self.raise_()
         self.activateWindow()

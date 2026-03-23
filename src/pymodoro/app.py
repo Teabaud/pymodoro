@@ -129,15 +129,14 @@ class PomodoroApp(QtCore.QObject):
     def _show_check_in_window(self) -> None:
         if self._check_in_screen and self._check_in_screen.isVisible():
             return
-        check_in_prompt = self._select_check_in_prompt()
-        if self._check_in_screen is None:
-            self._check_in_screen = CheckInScreen(
-                check_in_prompt=check_in_prompt, settings=self._settings
-            )
-            self._check_in_screen.submitted.connect(self._on_check_in_screen_submit)
-            self._check_in_screen.finished.connect(self._on_check_in_finished)
-        else:
-            self._check_in_screen.set_check_in_prompt(check_in_prompt)
+        if self._check_in_screen is not None:
+            self._check_in_screen.deleteLater()
+        self._check_in_screen = CheckInScreen(
+            check_in_prompt=self._select_check_in_prompt(),
+            settings=self._settings,
+        )
+        self._check_in_screen.submitted.connect(self._on_check_in_screen_submit)
+        self._check_in_screen.finished.connect(self._on_check_in_finished)
         self._check_in_screen.show()
 
     def _on_check_in_screen_submit(self, record: CheckInRecord) -> None:
