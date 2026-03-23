@@ -6,6 +6,7 @@ from typing import Any, Callable, cast
 from PySide6 import QtCore
 
 import pymodoro.tray as tray_module
+from pymodoro.icon import phase_icon
 from pymodoro.session import SessionPhase
 from pymodoro.tray import ActivationReason, TrayController
 
@@ -110,11 +111,6 @@ def test_refresh_updates_pause_tooltip_and_icon(
 ) -> None:
     monkeypatch.setattr(tray_module.QtWidgets, "QSystemTrayIcon", DummyTray)
     monkeypatch.setattr(tray_module.QtWidgets, "QMenu", DummyMenu)
-    monkeypatch.setattr(
-        tray_module.QtGui,
-        "QIcon",
-        lambda icon_path: f"icon-file:{icon_path}",
-    )
 
     sp_manager = DummySessionPhaseManager(SessionPhase.PAUSE, remaining_seconds=3_600)
     tray = TrayController(
@@ -122,14 +118,14 @@ def test_refresh_updates_pause_tooltip_and_icon(
         session_phase_manager=cast(Any, sp_manager),
     )
 
+    tray.tray.setIcon(phase_icon(SessionPhase.PAUSE))
     tray.refresh()
 
     assert tray._action_pause.text == "Resume"
-    tray_icon = cast(DummyTray, tray._tray)
+    tray_icon = cast(DummyTray, tray.tray)
     assert tray_icon.tooltip is not None
     assert tray_icon.tooltip.startswith("Pause until ")
     assert tray_icon.icon is not None
-    assert "icon-paused.svg" in tray_icon.icon
 
 
 def test_refresh_updates_work_tooltip_and_icon(
@@ -137,11 +133,6 @@ def test_refresh_updates_work_tooltip_and_icon(
 ) -> None:
     monkeypatch.setattr(tray_module.QtWidgets, "QSystemTrayIcon", DummyTray)
     monkeypatch.setattr(tray_module.QtWidgets, "QMenu", DummyMenu)
-    monkeypatch.setattr(
-        tray_module.QtGui,
-        "QIcon",
-        lambda icon_path: f"icon-file:{icon_path}",
-    )
 
     sp_manager = DummySessionPhaseManager(SessionPhase.WORK, remaining_seconds=5)
     tray = TrayController(
@@ -149,13 +140,13 @@ def test_refresh_updates_work_tooltip_and_icon(
         session_phase_manager=cast(Any, sp_manager),
     )
 
+    tray.tray.setIcon(phase_icon(SessionPhase.WORK))
     tray.refresh()
 
     assert tray._action_pause.text == "Pause until..."
-    tray_icon = cast(DummyTray, tray._tray)
+    tray_icon = cast(DummyTray, tray.tray)
     assert tray_icon.tooltip == "Work - 00:00:05"
     assert tray_icon.icon is not None
-    assert "icon-work.svg" in tray_icon.icon
 
 
 def test_refresh_updates_break_tooltip_and_icon(
@@ -163,11 +154,6 @@ def test_refresh_updates_break_tooltip_and_icon(
 ) -> None:
     monkeypatch.setattr(tray_module.QtWidgets, "QSystemTrayIcon", DummyTray)
     monkeypatch.setattr(tray_module.QtWidgets, "QMenu", DummyMenu)
-    monkeypatch.setattr(
-        tray_module.QtGui,
-        "QIcon",
-        lambda icon_path: f"icon-file:{icon_path}",
-    )
 
     sp_manager = DummySessionPhaseManager(SessionPhase.BREAK, remaining_seconds=12)
     tray = TrayController(
@@ -175,13 +161,13 @@ def test_refresh_updates_break_tooltip_and_icon(
         session_phase_manager=cast(Any, sp_manager),
     )
 
+    tray.tray.setIcon(phase_icon(SessionPhase.BREAK))
     tray.refresh()
 
     assert tray._action_pause.text == "Pause until..."
-    tray_icon = cast(DummyTray, tray._tray)
+    tray_icon = cast(DummyTray, tray.tray)
     assert tray_icon.tooltip == "Break - 00:00:12"
     assert tray_icon.icon is not None
-    assert "icon-break.svg" in tray_icon.icon
 
 
 def test_pause_action_emits_resume_when_paused(

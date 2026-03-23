@@ -64,8 +64,17 @@ class DummySessionPhaseManager:
         return 45
 
 
+class DummyTray:
+    def __init__(self) -> None:
+        self.icon: Any = None
+
+    def setIcon(self, icon: Any) -> None:
+        self.icon = icon
+
+
 class DummyTrayController:
     def __init__(self, *_: Any, **__: Any) -> None:
+        self.tray = DummyTray()
         self.openAppRequested = DummySignal()
         self.openSettingsRequested = DummySignal()
         self.checkInRequested = DummySignal()
@@ -164,11 +173,22 @@ class DummySettingsPanel:
         self.paused_states.append(paused)
 
 
+class DummyLogo:
+    def setIcon(self, icon: Any) -> None:
+        pass
+
+
+class DummySidebar:
+    def __init__(self) -> None:
+        self.logo = DummyLogo()
+
+
 class DummyAppWindow:
     def __init__(self, settings: AppSettings, *_: Any, **__: Any) -> None:
         self.visible = False
         self._settings_panel = DummySettingsPanel(settings)
         self.last_navigated_page: Page | None = None
+        self.sidebar = DummySidebar()
 
     def isVisible(self) -> bool:
         return self.visible
@@ -181,6 +201,9 @@ class DummyAppWindow:
 
     def show(self) -> None:
         self.visible = True
+
+    def setWindowIcon(self, icon: Any) -> None:
+        pass
 
     def get_settings_panel(self) -> DummySettingsPanel:
         return self._settings_panel

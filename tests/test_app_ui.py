@@ -21,14 +21,14 @@ def settings(tmp_path: Path) -> AppSettings:
 
 
 def _current_sidebar_text(window: AppWindow) -> str:
-    sidebar = window._sidebar  # type: ignore[attr-defined]
+    sidebar = window.sidebar  # type: ignore[attr-defined]
     current_item = sidebar._nav_item.currentItem()  # type: ignore[attr-defined]
     assert current_item is not None
     return current_item.text()
 
 
 def _current_main_page(window: AppWindow) -> Page:
-    main_area = window._main_area  # type: ignore[attr-defined]
+    main_area = window.main_area  # type: ignore[attr-defined]
     stack = main_area._stack  # type: ignore[attr-defined]
     current_widget = stack.currentWidget()
     for page, widget in main_area._page_widgets.items():  # type: ignore[attr-defined]
@@ -50,7 +50,7 @@ def test_sidebar_click_selects_page_and_updates_main_area(
     qcoreapp: QtCore.QCoreApplication, settings: AppSettings
 ) -> None:
     window = AppWindow(settings)
-    sidebar = window._sidebar  # type: ignore[attr-defined]
+    sidebar = window.sidebar  # type: ignore[attr-defined]
 
     items = sidebar._nav_item.findItems(  # type: ignore[attr-defined]
         Page.SETTINGS.value,
@@ -72,8 +72,8 @@ def test_logo_click_shows_dashboard_and_updates_selection(
     window = AppWindow(settings)
     window.navigate_to_page(Page.SETTINGS)
 
-    sidebar = window._sidebar  # type: ignore[attr-defined]
-    sidebar._logo.clicked.emit()  # type: ignore[attr-defined]
+    sidebar = window.sidebar  # type: ignore[attr-defined]
+    sidebar.logo.clicked.emit()  # type: ignore[attr-defined]
 
     assert _current_sidebar_text(window) == Page.DASHBOARD.value
     assert _current_main_page(window) is Page.DASHBOARD

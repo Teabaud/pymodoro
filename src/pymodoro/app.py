@@ -6,6 +6,7 @@ from pymodoro.app_ui import AppWindow
 from pymodoro.app_ui_widgets.pages import Page
 from pymodoro.app_ui_widgets.settings_panel import SettingsPanel
 from pymodoro.check_in_screen import CheckInScreen
+from pymodoro.icon import phase_icon
 from pymodoro.metrics_io import CheckInRecord, MetricsLogger, SessionRecord
 from pymodoro.notification_sound import NotificationSoundPlayer
 from pymodoro.session import (
@@ -64,6 +65,7 @@ class PomodoroApp(QtCore.QObject):
 
         self._sp_manager.start()
         self._tray_controller.show()
+        self._update_icon(self._sp_manager.session_phase)
 
         self.launch = self._app.exec
 
@@ -71,6 +73,7 @@ class PomodoroApp(QtCore.QObject):
         if self._app_window is None:
             self._app_window = AppWindow(self._settings)
             self._connect_settings_signals(self._app_window.get_settings_panel())
+            self._update_icon(self._sp_manager.session_phase)
         self._app_window.show()
         self._app_window.raise_()
         self._app_window.activateWindow()
@@ -95,6 +98,7 @@ class PomodoroApp(QtCore.QObject):
             self._notification_sound_player.play()
 
     def _on_phase_changed(self, transition: PhaseTransition) -> None:
+        self._update_icon(transition.current_phase)
         self._tray_controller.refresh()
         self._tray_controller.hide_phase_end_toast()
         if (
@@ -120,6 +124,13 @@ class PomodoroApp(QtCore.QObject):
             session_type=transition.previous_phase,
         )
         self._metrics_logger.log_record(record)
+
+    def _update_icon(self, phase: SessionPhase | None = None) -> None:
+        icon = phase_icon(phase)
+        self._tray_controller.tray.setIcon(icon)
+        if self._app_window:
+            self._app_window.setWindowIcon(icon)
+            self._app_window.sidebar.logo.setIcon(icon)
 
     def _on_start_break_from_toast(self) -> None:
         self._sp_manager.start_break_phase()

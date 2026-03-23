@@ -1,7 +1,7 @@
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from pymodoro.app_ui_widgets.pages import Page
-from pymodoro.tray import get_app_icon
+from pymodoro.icon import phase_icon
 
 STYLESHEET = """
 QListWidget {
@@ -31,8 +31,7 @@ Logo {
 class Logo(QtWidgets.QToolButton):
     def __init__(self, parent=None):
         super().__init__(parent)
-        icon = get_app_icon()
-        self.setIcon(icon)
+        self.setIcon(phase_icon())
         self.setIconSize(QtCore.QSize(70, 70))
         self.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
 
@@ -62,13 +61,13 @@ class Sidebar(QtWidgets.QFrame):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(4)
 
-        self._logo = Logo(self)
-        self._logo.clicked.connect(lambda: self.navigate.emit(Page.DASHBOARD))
+        self.logo = Logo(self)
+        self.logo.clicked.connect(lambda: self.navigate.emit(Page.DASHBOARD))
 
         self._nav_item = NavItem(self)
         self._nav_item.itemClicked.connect(self._on_nav_item_clicked)
 
-        layout.addWidget(self._logo, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.logo, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(Separator(self))
         layout.addWidget(self._nav_item)
 

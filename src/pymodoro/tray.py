@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from pymodoro.session import SessionPhase, SessionPhaseManager
 
 # isort: split
@@ -9,17 +7,6 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 ActivationReason = QtWidgets.QSystemTrayIcon.ActivationReason
 AlignVCenter = QtCore.Qt.AlignmentFlag.AlignVCenter
-
-_ICON_DIR = Path(__file__).resolve().parents[2] / "assets" / "icons"
-_PHASE_ICON_FILES = {
-    SessionPhase.WORK: _ICON_DIR / "icon-work.svg",
-    SessionPhase.BREAK: _ICON_DIR / "icon-break.svg",
-    SessionPhase.PAUSE: _ICON_DIR / "icon-paused.svg",
-}
-
-
-def get_app_icon() -> QtGui.QIcon:
-    return QtGui.QIcon(str(_ICON_DIR / "icon-break.svg"))
 
 
 class TrayController(QtCore.QObject):
@@ -41,7 +28,7 @@ class TrayController(QtCore.QObject):
         super().__init__(parent)
         self._session_phase_manager = session_phase_manager
 
-        self._tray = QtWidgets.QSystemTrayIcon(app)
+        self.tray = QtWidgets.QSystemTrayIcon(app)
         self._menu = QtWidgets.QMenu()
         self._action_open_app = self._menu.addAction("Open App")
         self._action_open_app.triggered.connect(self.openAppRequested.emit)
@@ -51,27 +38,18 @@ class TrayController(QtCore.QObject):
         self._action_pause.triggered.connect(self._on_pause_action)
         self._action_quit = self._menu.addAction("Quit")
         self._action_quit.triggered.connect(self.quitRequested.emit)
-        self._tray.setContextMenu(self._menu)
-        self._tray.activated.connect(self._on_tray_activated)
+        self.tray.setContextMenu(self._menu)
+        self.tray.activated.connect(self._on_tray_activated)
 
         self._update_timer = QtCore.QTimer(self)
         self._update_timer.setInterval(1000)
         self._update_timer.timeout.connect(self.refresh)
-        self._current_icon_phase: SessionPhase | None = None
         self._phase_end_toast: PhaseEndToast | None = None
 
     def show(self) -> None:
-        self._tray.show()
+        self.tray.show()
         self._update_timer.start()
         self.refresh()
-
-    def _render_phase_icon(self, phase: SessionPhase) -> None:
-        if phase == self._current_icon_phase:
-            return
-        svg_path = _PHASE_ICON_FILES.get(phase, _PHASE_ICON_FILES[SessionPhase.WORK])
-        icon = QtGui.QIcon(str(svg_path))
-        self._tray.setIcon(icon)
-        self._current_icon_phase = phase
 
     def refresh(self) -> None:
         phase = self._session_phase_manager.session_phase
@@ -84,8 +62,7 @@ class TrayController(QtCore.QObject):
             )
             self._action_pause.setText("Pause until...")
 
-        self._tray.setToolTip(tooltip_str)
-        self._render_phase_icon(phase)
+        self.tray.setToolTip(tooltip_str)
 
     def show_phase_end_toast(self, text: str) -> None:
         self._ensure_phase_end_toast().show_toast(text=text)

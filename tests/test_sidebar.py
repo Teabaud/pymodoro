@@ -36,6 +36,6 @@ def test_sidebar_logo_emits_navigate_dashboard(
     received: list[Page] = []
     sidebar.navigate.connect(received.append)
 
-    sidebar._logo.clicked.emit()  # type: ignore[attr-defined]
+    sidebar.logo.clicked.emit()  # type: ignore[attr-defined]
 
     assert received == [Page.DASHBOARD]

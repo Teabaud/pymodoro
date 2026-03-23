@@ -8,8 +8,8 @@ from pymodoro.app_ui_widgets.dashboard import Dashboard
 from pymodoro.app_ui_widgets.pages import Page
 from pymodoro.app_ui_widgets.settings_panel import SettingsPanel
 from pymodoro.app_ui_widgets.sidebar import Sidebar
+from pymodoro.icon import phase_icon
 from pymodoro.settings import AppSettings
-from pymodoro.tray import get_app_icon
 
 
 class MainArea(QtWidgets.QFrame):
@@ -52,7 +52,7 @@ class AppWindow(QtWidgets.QMainWindow):
         self.restore_geometry()
 
         self.setWindowTitle("Pymodoro App")
-        self.setWindowIcon(get_app_icon())
+        self.setWindowIcon(phase_icon())
         self.setMinimumSize(800, 500)
 
         self._build_ui()
@@ -63,25 +63,25 @@ class AppWindow(QtWidgets.QMainWindow):
         root = QtWidgets.QHBoxLayout(container)
         root.setContentsMargins(0, 12, 0, 0)
 
-        self._sidebar = Sidebar(container)
-        self._sidebar.navigate.connect(self.navigate_to_page)
+        self.sidebar = Sidebar(container)
+        self.sidebar.navigate.connect(self.navigate_to_page)
 
-        self._main_area = MainArea(self._settings, container)
+        self.main_area = MainArea(self._settings, container)
 
-        root.addWidget(self._sidebar)
-        root.addWidget(self._main_area)
+        root.addWidget(self.sidebar)
+        root.addWidget(self.main_area)
         self.navigate_to_page(Page.DASHBOARD)
 
         self.setCentralWidget(container)
 
     def get_settings_panel(self) -> SettingsPanel:
-        return cast(SettingsPanel, self._main_area._page_widgets[Page.SETTINGS])
+        return cast(SettingsPanel, self.main_area._page_widgets[Page.SETTINGS])
 
     # ---- Navigation handlers ----------------------------------------------
     def navigate_to_page(self, page: Page) -> None:
         logger.info(f"Navigating to page: {page}")
-        self._sidebar.set_current_page(page)
-        self._main_area.show_page(page)
+        self.sidebar.set_current_page(page)
+        self.main_area.show_page(page)
 
     # ---- State restoration ------------------------------------------------
     def restore_geometry(self) -> None:
