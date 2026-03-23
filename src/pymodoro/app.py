@@ -20,7 +20,6 @@ from pymodoro.tray import TrayController
 from PySide6 import QtCore
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
-
 MIN_SESSION_DURATION_SEC = 120  # 2 minutes
 
 

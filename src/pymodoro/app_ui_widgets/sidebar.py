@@ -3,7 +3,6 @@ from PySide6 import QtCore, QtWidgets
 from pymodoro.app_ui_widgets.pages import Page
 from pymodoro.tray import get_app_icon
 
-
 STYLESHEET = """
 QListWidget {
     border: none;

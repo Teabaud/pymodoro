@@ -17,7 +17,6 @@ from pymodoro.check_in_screen_widgets import (
 )
 from pymodoro.metrics_io import Leverage
 
-
 # -- Helpers ------------------------------------------------------------------
 
 
