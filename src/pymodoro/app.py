@@ -152,9 +152,9 @@ class PomodoroApp(QtCore.QObject):
     def _on_check_in_screen_submit(self, record: CheckInRecord) -> None:
         self._metrics_logger.log_record(record)
         logger.info(
-            "Answer: {} | focus_rating: {} | exercise_result: ({}, {})",
+            "Answer: {} | fulluse_rating: {} | exercise_result: ({}, {})",
             record.answer,
-            record.focus_rating,
+            record.fulluse_rating,
             record.exercise_name,
             record.exercise_rep_count,
         )

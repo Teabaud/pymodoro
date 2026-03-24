@@ -706,8 +706,8 @@ class _SessionTooltip(QtWidgets.QFrame):
                 answer_lbl.setStyleSheet("font-size: 11px;")
                 layout.addWidget(answer_lbl)
                 extras: list[str] = []
-                if ci.focus_rating is not None:
-                    extras.append(f"Focus: {ci.focus_rating}/5")
+                if ci.fulluse_rating is not None:
+                    extras.append(f"Fulluse: {ci.fulluse_rating}/5")
                 if ci.exercise_name:
                     ex = ci.exercise_name
                     if ci.exercise_rep_count is not None:

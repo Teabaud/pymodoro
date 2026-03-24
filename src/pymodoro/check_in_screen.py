@@ -5,7 +5,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from pymodoro.check_in_screen_widgets import (
     ActivityWidget,
     ExerciseWidget,
-    FocusRatingWidget,
+    FulluseRatingWidget,
     LeverageWidget,
     MetricsGrid,
     ProjectWidget,
@@ -71,7 +71,7 @@ class CheckInScreen(QtWidgets.QDialog):
         self._project_widget = ProjectWidget(settings.check_in.projects, self)
         self._activity_widget = ActivityWidget(settings.check_in.activities, self)
         self._leverage_widget = LeverageWidget(self)
-        self._focus_rating_widget = FocusRatingWidget(self)
+        self._fulluse_rating_widget = FulluseRatingWidget(self)
         self._exercise_widget = ExerciseWidget(settings.check_in.exercises, self)
         self._submit_button = QtWidgets.QPushButton("Submit", self)
         self._submit_button.clicked.connect(self._on_submit)
@@ -94,7 +94,7 @@ class CheckInScreen(QtWidgets.QDialog):
         metrics_grid.add_row("Project", self._project_widget)
         metrics_grid.add_row("Activity", self._activity_widget)
         metrics_grid.add_row("Leverage", self._leverage_widget)
-        metrics_grid.add_row("Focus", self._focus_rating_widget)
+        metrics_grid.add_row("Fulluse", self._fulluse_rating_widget)
         metrics_grid.add_row("Exercise", self._exercise_widget)
 
         centered_layout = QtWidgets.QHBoxLayout()
@@ -135,7 +135,7 @@ class CheckInScreen(QtWidgets.QDialog):
             timestamp=datetime.now(timezone.utc),
             prompt=self._prompt_card.prompt,
             answer=self._prompt_card.answer,
-            focus_rating=self._focus_rating_widget.rating,
+            fulluse_rating=self._fulluse_rating_widget.rating,
             exercise_name=self._exercise_widget.exercise_name,
             exercise_rep_count=self._exercise_widget.rep_count,
             project=self._project_widget.project,

@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from pymodoro.metrics_io import ExerciseResult, FocusRating, Leverage
+from pymodoro.metrics_io import ExerciseResult, FulluseRating, Leverage
 
 _OVERLAY_STYLESHEET = """
     #PromptOverlay QPushButton {
@@ -279,8 +279,8 @@ class _ExclusiveToggleRow(QWidget):
         return self._selected
 
 
-class FocusRatingWidget(_ExclusiveToggleRow):
-    """Focus rating selector with 1-5 buttons."""
+class FulluseRatingWidget(_ExclusiveToggleRow):
+    """Fulluse rating selector with 1-5 buttons."""
 
     _OPTIONS = [str(v) for v in range(1, 6)]
 
@@ -292,7 +292,7 @@ class FocusRatingWidget(_ExclusiveToggleRow):
         )
 
     @property
-    def rating(self) -> FocusRating:
+    def rating(self) -> FulluseRating:
         return int(self.selected) if self.selected is not None else None
 
 

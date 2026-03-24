@@ -231,7 +231,7 @@ class DummyMetricsLogger:
                 {
                     "prompt": record.prompt,
                     "answer": record.answer,
-                    "focus_rating": record.focus_rating,
+                    "fulluse_rating": record.fulluse_rating,
                     "exercise_name": record.exercise_name,
                     "exercise_rep_count": record.exercise_rep_count,
                 }
@@ -506,7 +506,7 @@ def test_note_submit_closes_prompt(monkeypatch: Any, settings: AppSettings) -> N
             timestamp=datetime.now(timezone.utc),
             prompt="Break time?",
             answer="done",
-            focus_rating=None,
+            fulluse_rating=None,
             exercise_name=None,
             exercise_rep_count=None,
         )
@@ -529,7 +529,7 @@ def test_check_in_submit_creates_jsonl_log_record(
             timestamp=datetime.now(timezone.utc),
             prompt="Break time?",
             answer="done",
-            focus_rating=None,
+            fulluse_rating=None,
             exercise_name=None,
             exercise_rep_count=None,
         )
@@ -544,7 +544,7 @@ def test_check_in_submit_creates_jsonl_log_record(
     assert record["record_type"] == "check_in"
     assert record["prompt"] == "Break time?"
     assert record["answer"] == "done"
-    assert "focus_rating" not in record
+    assert "fulluse_rating" not in record
     assert "exercise_name" not in record
     assert "exercise_rep_count" not in record
     assert record["timestamp"].endswith("Z") or record["timestamp"].endswith("+00:00")
@@ -564,7 +564,7 @@ def test_check_in_submit_appends_multiple_jsonl_records(
             timestamp=datetime.now(timezone.utc),
             prompt="Break time?",
             answer="first",
-            focus_rating=4,
+            fulluse_rating=4,
             exercise_name="squats",
             exercise_rep_count=12,
         )
@@ -574,7 +574,7 @@ def test_check_in_submit_appends_multiple_jsonl_records(
             timestamp=datetime.now(timezone.utc),
             prompt="Break time?",
             answer="second",
-            focus_rating=None,
+            fulluse_rating=None,
             exercise_name=None,
             exercise_rep_count=None,
         )
@@ -587,12 +587,12 @@ def test_check_in_submit_appends_multiple_jsonl_records(
     second_record = json.loads(lines[1])
     assert first_record["record_type"] == "check_in"
     assert first_record["answer"] == "first"
-    assert first_record["focus_rating"] == 4
+    assert first_record["fulluse_rating"] == 4
     assert first_record["exercise_name"] == "squats"
     assert first_record["exercise_rep_count"] == 12
     assert second_record["record_type"] == "check_in"
     assert second_record["answer"] == "second"
-    assert "focus_rating" not in second_record
+    assert "fulluse_rating" not in second_record
     assert "exercise_name" not in second_record
     assert "exercise_rep_count" not in second_record
 
@@ -632,7 +632,7 @@ def test_phase_change_logs_session_record(
     assert "duration_sec" not in record
     assert "prompt" not in record
     assert "answer" not in record
-    assert "focus_rating" not in record
+    assert "fulluse_rating" not in record
     assert "exercise_name" not in record
     assert "exercise_rep_count" not in record
 

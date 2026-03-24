@@ -10,7 +10,7 @@ from PySide6.QtCore import QObject
 from pymodoro.check_in_screen_widgets import (
     ActivityWidget,
     ExerciseWidget,
-    FocusRatingWidget,
+    FulluseRatingWidget,
     LeverageWidget,
     ProjectWidget,
     PromptCard,
@@ -97,7 +97,7 @@ def test_prompt_card_overlay_receives_current_prompt(qcoreapp: Any) -> None:
     assert overlays[0].prompts == ["Q1", "Q2", "Q3"]
 
 
-# -- _ExclusiveToggleRow (via FocusRatingWidget) ------------------------------
+# -- _ExclusiveToggleRow (via FulluseRatingWidget) ------------------------------
 
 
 def test_toggle_row_buttons_have_capitalized_labels(qcoreapp: Any) -> None:
@@ -129,7 +129,7 @@ def test_toggle_row_only_one_selected(qcoreapp: Any) -> None:
 
 
 def test_toggle_row_tooltips_applied(qcoreapp: Any) -> None:
-    widget = FocusRatingWidget()
+    widget = FulluseRatingWidget()
     assert widget._buttons[0].toolTip() == "Very distracted"
     assert widget._buttons[4].toolTip() == "Deep focus"
     assert widget._buttons[2].toolTip() == ""
@@ -158,23 +158,23 @@ def test_toggle_row_tab_focus_moves_to_checked_button(qcoreapp: Any) -> None:
     assert widget._buttons[2].focusPolicy() == QtCore.Qt.FocusPolicy.TabFocus
 
 
-# -- FocusRatingWidget --------------------------------------------------------
+# -- FulluseRatingWidget --------------------------------------------------------
 
 
-def test_focus_rating_has_five_buttons(qcoreapp: Any) -> None:
-    widget = FocusRatingWidget()
+def test_fulluse_rating_has_five_buttons(qcoreapp: Any) -> None:
+    widget = FulluseRatingWidget()
     assert len(widget._buttons) == 5
     assert [btn.text() for btn in widget._buttons] == ["1", "2", "3", "4", "5"]
 
 
-def test_focus_rating_returns_int(qcoreapp: Any) -> None:
-    widget = FocusRatingWidget()
+def test_fulluse_rating_returns_int(qcoreapp: Any) -> None:
+    widget = FulluseRatingWidget()
     widget._buttons[2].click()
     assert widget.rating == 3
 
 
-def test_focus_rating_returns_none_when_unselected(qcoreapp: Any) -> None:
-    widget = FocusRatingWidget()
+def test_fulluse_rating_returns_none_when_unselected(qcoreapp: Any) -> None:
+    widget = FulluseRatingWidget()
     assert widget.rating is None
 
 

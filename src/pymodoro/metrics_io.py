@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 # ---------------------------------------------------------------------------
 Leverage = Literal["high", "medium", "low"]
 
-type FocusRating = int | None
+type FulluseRating = int | None
 type ExerciseResult = tuple[str, int] | None
 
 
@@ -21,7 +21,7 @@ class CheckInRecord(BaseModel):
     timestamp: datetime = Field()
     prompt: str = ""
     answer: str = ""
-    focus_rating: int | None = None
+    fulluse_rating: int | None = None
     exercise_name: str | None = None
     exercise_rep_count: int | None = None
     project: str | None = None
